@@ -96,13 +96,13 @@ ensure_JS_dep_single(
 
 
 setup(
-    name="Mesa",
+    name="MesaINES",
     version=version,
-    description="Agent-based modeling (ABM) in Python 3+",
+    description="Agent-based modeling (ABM) in Python 3+ by INES",
     long_description=readme,
-    author="Project Mesa Team",
-    author_email="projectmesa@googlegroups.com",
-    url="https://github.com/projectmesa/mesa",
+    author="INES, Uni Kassel",
+    author_email="Sascha.Holzhauer@uni-kassel.de",
+    url="https://github.com/INES/mesa",
     packages=find_packages(),
     package_data={
         "mesa": [

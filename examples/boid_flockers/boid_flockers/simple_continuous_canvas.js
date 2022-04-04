@@ -4,12 +4,12 @@ const ContinuousVisualization = function(width, height, context) {
 			if (p.Shape == "rect")
 				this.drawRectange(p.x, p.y, p.w, p.h, p.Color, p.Filled);
 			if (p.Shape == "circle")
-				this.drawCircle(p.x, p.y, p.r, p.Color, p.Filled);
+				this.drawCircle(p.x, p.y, p.r, p.Color, p.Filled, p.text, p.text_color);
 		};
 
 	};
 
-	this.drawCircle = function(x, y, radius, color, fill) {
+	this.drawCircle = function(x, y, radius, color, fill, text, text_color) {
 		const cx = x * width;
 		const cy = y * height;
 		const r = radius;
@@ -25,6 +25,14 @@ const ContinuousVisualization = function(width, height, context) {
 			context.fillStyle = color;
 			context.fill();
 		}
+		
+		// This part draws the text inside the Circle
+        if (text !== undefined) {
+                context.fillStyle = text_color;
+                context.textAlign = 'center';
+                context.textBaseline= 'middle';
+                context.fillText(text, cx, cy);
+        }
 
 	};
 
