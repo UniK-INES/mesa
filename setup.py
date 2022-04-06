@@ -46,7 +46,7 @@ if not os.path.isdir(dst_bootstrap_path):
     print("Done")
 
 setup(
-    name="MesaINES",
+    name="Mesa",
     version=version,
     description="Agent-based modeling (ABM) in Python 3+ by INES",
     long_description=readme,

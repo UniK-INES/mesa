@@ -312,6 +312,16 @@ class ModularServer(tornado.web.Application):
                 model_params[key] = val
 
         self.model = self.model_cls(**model_params)
+        
+        self.js_code = []
+        for element in self.visualization_elements:
+            for include_file in element.package_includes:
+                self.package_includes.add(include_file)
+            for include_file in element.local_includes:
+                self.local_includes.add(include_file)
+            self.js_code.append(element.js_code)
+        
+        #super().find_handler("/").get()
 
     def render_model(self):
         """Turn the current state of the model into a dictionary of

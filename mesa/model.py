@@ -17,6 +17,7 @@ class Model:
         """Create a new model object and instantiate its RNG automatically."""
         cls._seed = kwargs.get("seed", None)
         cls.random = random.Random(cls._seed)
+        print("Running Mesa INES's Model...")
         return object.__new__(cls)
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:

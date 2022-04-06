@@ -1,17 +1,7 @@
-Mesa: Agent-based modeling in Python 3+
-=========================================
+Mesa-INES: Agent-based modeling in Python 3+
+============================================
 
-.. image:: https://github.com/projectmesa/mesa/workflows/build/badge.svg
-        :target: https://github.com/projectmesa/mesa/actions
-
-.. image:: https://codecov.io/gh/projectmesa/mesa/branch/main/graph/badge.svg
-        :target: https://codecov.io/gh/projectmesa/mesa
-
-.. image:: https://img.shields.io/badge/code%20style-black-000000.svg
-        :target: https://github.com/psf/black
-
-.. image:: https://img.shields.io/matrix/project-mesa:matrix.org?label=chat&logo=Matrix
-        :target: https://matrix.to/#/#project-mesa:matrix.org
+Mesa fork with changes for internal educational purposes.
 
 It allows users to quickly create agent-based models using built-in core components (such as spatial grids and agent schedulers) or customized implementations; visualize them using a browser-based interface; and analyze their results using Python's data analysis tools. Its goal is to be the Python 3-based alternative to NetLogo, Repast, or MASON.
 
@@ -25,7 +15,7 @@ It allows users to quickly create agent-based models using built-in core compone
 being visualized in a browser window and analyzed in a Jupyter
 notebook.*
 
-.. _`Mesa` : https://github.com/projectmesa/mesa/
+.. _`Mesa-INES` : https://github.com/UniK-INES/mesa/
 
 
 Features
