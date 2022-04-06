@@ -23,6 +23,7 @@ class Model:
         obj = object.__new__(cls)
         obj._seed = kwargs.get("seed", None)
         obj.random = random.Random(obj._seed)
+        print("Running Mesa INES's Model...")
         return obj
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:

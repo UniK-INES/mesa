@@ -382,6 +382,16 @@ class ModularServer(tornado.web.Application):
         # We specify the `running` attribute here so that the user doesn't have
         # to define it explicitly in their model's __init__.
         self.model.running = True
+        
+        self.js_code = []
+        for element in self.visualization_elements:
+            for include_file in element.package_includes:
+                self.package_includes.add(include_file)
+            for include_file in element.local_includes:
+                self.local_includes.add(include_file)
+            self.js_code.append(element.js_code)
+        
+        #super().find_handler("/").get()
 
     def render_model(self):
         """Turn the current state of the model into a dictionary of

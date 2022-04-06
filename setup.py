@@ -96,7 +96,7 @@ ensure_JS_dep_single(
 
 
 setup(
-    name="MesaINES",
+    name="Mesa",
     version=version,
     description="Agent-based modeling (ABM) in Python 3+ by INES",
     long_description=readme,
