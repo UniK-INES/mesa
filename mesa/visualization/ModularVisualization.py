@@ -403,11 +403,14 @@ class ModularServer(tornado.web.Application):
             visualization_state.append(element_state)
         return visualization_state
 
-    def launch(self, port=None, open_browser=True):
+    def launch(self, port=None, open_browser=True, urlpath=None):
         """Run the app."""
         if port is not None:
             self.port = port
-        url = f"http://127.0.0.1:{self.port}"
+        if urlpath is not None:
+            self.urlpath = urlpath
+
+        url = f"http://127.0.0.1:{self.port}/" + self.urlpath
         print(f"Interface starting at {url}")
         self.listen(self.port)
         if open_browser:
