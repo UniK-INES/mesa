@@ -24,26 +24,87 @@ with open("mesa/__init__.py") as fd:
 with open("README.rst", "rb", encoding="utf-8") as f:
     readme = f.read()
 
-# Ensure Bootstrap
-# Important: when you update the Bootstrap version, make sure to also update the
-# hardcoded included files and versions in:
-# - MANIFEST.in
-# - mesa/visualization/templates/modular_template.html
-bootstrap_version = "3.3.7"
-bootstrap_dir = f"bootstrap-{bootstrap_version}"
-template_dir = "mesa/visualization/templates"
-dst_bootstrap_path = os.path.join(template_dir, bootstrap_dir)
-if not os.path.isdir(dst_bootstrap_path):
-    print("Downloading the Bootstrap dependency from the internet...")
-    url = f"https://github.com/twbs/bootstrap/releases/download/v{bootstrap_version}/bootstrap-{bootstrap_version}-dist.zip"
-    zip_file = "bootstrap-dist.zip"
+# Ensure JS dependencies are downloaded
+external_dir = "mesa/visualization/templates/external"
+# We use a different path for single-file JS because some of them are loaded
+# the same way as Mesa JS files
+external_dir_single = "mesa/visualization/templates/js/external"
+# First, ensure that the external directories exists
+os.makedirs(external_dir, exist_ok=True)
+os.makedirs(external_dir_single, exist_ok=True)
+
+
+def ensure_JS_dep(dirname, url):
+    dst_path = os.path.join(external_dir, dirname)
+    if os.path.isdir(dst_path):
+        # Do nothing if already downloaded
+        return
+    print(f"Downloading the {dirname} dependency from the internet...")
+    zip_file = dirname + ".zip"
     urllib.request.urlretrieve(url, zip_file)
     with zipfile.ZipFile(zip_file, "r") as zip_ref:
         zip_ref.extractall()
-    shutil.move(f"bootstrap-{bootstrap_version}-dist", dst_bootstrap_path)
+    shutil.move(dirname, dst_path)
     # Cleanup
     os.remove(zip_file)
     print("Done")
+
+
+def ensure_JS_dep_single(url, out_name=None):
+    # Used for downloading e.g. jQuery single file
+    if out_name is None:
+        out_name = url.split("/")[-1]
+    dst_path = os.path.join(external_dir_single, out_name)
+    if os.path.isfile(dst_path):
+        return
+    print(f"Downloading the {out_name} dependency from the internet...")
+    urllib.request.urlretrieve(url, out_name)
+    shutil.move(out_name, dst_path)
+
+
+# Important: when you update JS dependency version, make sure to also update the
+# hardcoded included files and versions in: mesa/visualization/templates/modular_template.html
+
+# Ensure Bootstrap
+bootstrap_version = "4.6.1"
+ensure_JS_dep(
+    f"bootstrap-{bootstrap_version}-dist",
+    f"https://github.com/twbs/bootstrap/releases/download/v{bootstrap_version}/bootstrap-{bootstrap_version}-dist.zip",
+)
+
+# Ensure Bootstrap Slider
+bootstrap_slider_version = "11.0.2"
+ensure_JS_dep(
+    f"bootstrap-slider-{bootstrap_slider_version}",
+    f"https://github.com/seiyria/bootstrap-slider/archive/refs/tags/v{bootstrap_slider_version}.zip",
+)
+
+# Ensure Bootstrap Switch
+bootstrap_switch_version = "3.3.4"
+ensure_JS_dep(
+    f"bootstrap-switch-{bootstrap_switch_version}",
+    f"https://github.com/Bttstrp/bootstrap-switch/archive/refs/tags/v{bootstrap_switch_version}.zip",
+)
+
+jquery_version = "2.2.4"
+ensure_JS_dep_single(
+    f"https://code.jquery.com/jquery-{jquery_version}.min.js",
+)
+# Important: when updating the D3 version, make sure to update the constant
+# D3_JS_FILE in mesa/visualization/ModularVisualization.py.
+d3_version = "7.4.3"
+ensure_JS_dep_single(
+    f"https://cdnjs.cloudflare.com/ajax/libs/d3/{d3_version}/d3.min.js",
+    out_name=f"d3-{d3_version}.min.js",
+)
+# Important: Make sure to update CHART_JS_FILE in
+# mesa/visualization/ModularVisualization.py.
+chartjs_version = "3.6.1"
+ensure_JS_dep_single(
+    f"https://cdn.jsdelivr.net/npm/chart.js@{chartjs_version}/dist/chart.min.js",
+    out_name=f"chart-{chartjs_version}.min.js",
+)
+
 
 setup(
     name="Mesa",
@@ -59,7 +120,7 @@ setup(
             "visualization/templates/*.html",
             "visualization/templates/css/*",
             "visualization/templates/js/*",
-            f"visualization/templates/{bootstrap_dir}/**/*",
+            "visualization/templates/external/**/*",
         ],
         "cookiecutter-mesa": ["cookiecutter-mesa/*"],
     },

@@ -116,16 +116,19 @@ from mesa.visualization.UserParam import UserSettableParameter
 if platform.system() == "Windows" and platform.python_version_tuple() >= ("3", "7"):
     asyncio.set_event_loop_policy(asyncio.WindowsSelectorEventLoopPolicy())
 
+D3_JS_FILE = "external/d3-7.4.3.min.js"
+CHART_JS_FILE = "external/chart-3.6.1.min.js"
+
 
 class VisualizationElement:
     """
     Defines an element of the visualization.
 
     Attributes:
-        package_includes: A list of external JavaScript files to include that
-                          are part of the Mesa packages.
-        local_includes: A list of JavaScript files that are local to the
-                        directory that the server is being run in.
+        package_includes: A list of external JavaScript and CSS files to
+                          include that are part of the Mesa packages.
+        local_includes: A list of JavaScript and CSS files that are local to
+                        the directory that the server is being run in.
         js_code: A JavaScript code string to instantiate the element.
 
     Methods:
@@ -171,8 +174,10 @@ class PageHandler(tornado.web.RequestHandler):
             port=self.application.port,
             model_name=self.application.model_name,
             description=self.application.description,
-            package_includes=self.application.package_includes,
-            local_includes=self.application.local_includes,
+            package_js_includes=self.application.package_js_includes,
+            package_css_includes=self.application.package_css_includes,
+            local_js_includes=self.application.local_js_includes,
+            local_css_includes=self.application.local_css_includes,
             scripts=self.application.js_code,
         )
 
@@ -235,17 +240,18 @@ class ModularServer(tornado.web.Application):
     verbose = True
 
     port = int(os.getenv("PORT", 8521))  # Default port to listen on
+    urlpath = str(os.getenv("URLPATH", ""))
     max_steps = 100000
 
     # Handlers and other globals:
-    page_handler = (r"/", PageHandler)
+    page_handler = (r"/" + urlpath, PageHandler)
     socket_handler = (r"/ws", SocketHandler)
     static_handler = (
         r"/static/(.*)",
         tornado.web.StaticFileHandler,
         {"path": os.path.dirname(__file__) + "/templates"},
     )
-    local_handler = (r"/local/(.*)", tornado.web.StaticFileHandler, {"path": ""})
+    local_handler = (r"/" + urlpath + "/local/(.*)", tornado.web.StaticFileHandler, {"path": ""})
 
     handlers = [page_handler, socket_handler, static_handler, local_handler]
 
@@ -263,14 +269,22 @@ class ModularServer(tornado.web.Application):
         """Create a new visualization server with the given elements."""
         # Prep visualization elements:
         self.visualization_elements = visualization_elements
-        self.package_includes = set()
-        self.local_includes = set()
+        self.package_js_includes = set()
+        self.package_css_includes = set()
+        self.local_js_includes = set()
+        self.local_css_includes = set()
         self.js_code = []
         for element in self.visualization_elements:
             for include_file in element.package_includes:
-                self.package_includes.add(include_file)
+                if self._is_stylesheet(include_file):
+                    self.package_css_includes.add(include_file)
+                else:
+                    self.package_js_includes.add(include_file)
             for include_file in element.local_includes:
-                self.local_includes.add(include_file)
+                if self._is_stylesheet(include_file):
+                    self.local_css_includes.add(include_file)
+                else:
+                    self.local_js_includes.add(include_file)
             self.js_code.append(element.js_code)
 
         # Initializing the model
@@ -334,14 +348,21 @@ class ModularServer(tornado.web.Application):
             visualization_state.append(element_state)
         return visualization_state
 
-    def launch(self, port=None, open_browser=True):
+    def launch(self, port=None, open_browser=True, urlpath=None):
         """Run the app."""
         if port is not None:
             self.port = port
-        url = f"http://127.0.0.1:{self.port}"
+        if urlpath is not None:
+            self.urlpath = urlpath
+
+        url = f"http://127.0.0.1:{self.port}/" + self.urlpath
         print(f"Interface starting at {url}")
         self.listen(self.port)
         if open_browser:
             webbrowser.open(url)
         tornado.autoreload.start()
         tornado.ioloop.IOLoop.current().start()
+
+    @staticmethod
+    def _is_stylesheet(filename):
+        return filename.lower().endswith(".css")
