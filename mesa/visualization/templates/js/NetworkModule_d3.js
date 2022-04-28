@@ -1,6 +1,6 @@
-var NetworkModule = function (svg_width, svg_height) {
+const NetworkModule = function (svg_width, svg_height) {
   // Create the svg tag:
-  var svg_tag =
+  const svg_tag =
     "<svg id='NetworkModule_d3' width='" +
     svg_width +
     "' height='" +
@@ -11,18 +11,18 @@ var NetworkModule = function (svg_width, svg_height) {
   // Append svg to #elements:
   $("#elements").append($(svg_tag)[0]);
 
-  var svg = d3.select("#NetworkModule_d3");
-  var width = +svg.attr("width");
-  var height = +svg.attr("height");
-  var g = svg
+  const svg = d3.select("#NetworkModule_d3");
+  const width = +svg.attr("width");
+  const height = +svg.attr("height");
+  const g = svg
     .append("g")
     .classed("network_root", true)
     .attr("transform", "translate(" + width / 2 + "," + height / 2 + ")");
 
-  var tooltip = d3
+  const tooltip = d3
     .select("body")
     .append("div")
-    .attr("class", "tooltip")
+    .attr("class", "d3tooltip")
     .style("opacity", 0);
 
   svg.call(
@@ -31,14 +31,14 @@ var NetworkModule = function (svg_width, svg_height) {
     })
   );
 
-  var links = g.append("g").attr("class", "links");
+  const links = g.append("g").attr("class", "links");
 
-  var nodes = g.append("g").attr("class", "nodes");
+  const nodes = g.append("g").attr("class", "nodes");
 
   this.render = function (data) {
-    var graph = JSON.parse(JSON.stringify(data));
+    const graph = JSON.parse(JSON.stringify(data));
 
-    simulation = d3
+    const simulation = d3
       .forceSimulation()
       .nodes(graph.nodes)
       .force("charge", d3.forceManyBody().strength(-80).distanceMin(2))
@@ -47,7 +47,7 @@ var NetworkModule = function (svg_width, svg_height) {
       .stop();
 
     for (
-      var i = 0,
+      let i = 0,
         n = Math.ceil(
           Math.log(simulation.alphaMin()) /
             Math.log(1 - simulation.alphaDecay())
@@ -89,12 +89,12 @@ var NetworkModule = function (svg_width, svg_height) {
       .data(graph.nodes)
       .enter()
       .append("circle")
-      .on("mouseover", function (d) {
+      .on("mouseover", function (event, d) {
         tooltip.transition().duration(200).style("opacity", 0.9);
         tooltip
           .html(d.tooltip)
-          .style("left", d3.event.pageX + "px")
-          .style("top", d3.event.pageY + "px");
+          .style("left", event.pageX + "px")
+          .style("top", event.pageY + "px");
       })
       .on("mouseout", function () {
         tooltip.transition().duration(500).style("opacity", 0);
