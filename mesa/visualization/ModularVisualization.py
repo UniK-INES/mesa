@@ -251,7 +251,11 @@ class ModularServer(tornado.web.Application):
         tornado.web.StaticFileHandler,
         {"path": os.path.dirname(__file__) + "/templates"},
     )
-    local_handler = (r"/" + urlpath + "/local/(.*)", tornado.web.StaticFileHandler, {"path": ""})
+    local_handler = (
+        r"/" + urlpath + "/local/(.*)",
+        tornado.web.StaticFileHandler,
+        {"path": ""},
+    )
 
     handlers = [page_handler, socket_handler, static_handler, local_handler]
 
