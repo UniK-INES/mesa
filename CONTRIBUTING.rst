@@ -27,19 +27,20 @@ discuss via `Matrix`_ OR via `an issue`_.
 - Fork the Mesa repository.
 - `Clone your repository`_ from Github to your machine.
 - Create a new branch in your fork: ``git checkout -b BRANCH_NAME``
+- Run ``git config pull.rebase true``. This prevents messy merge commits when updating your branch on top of Mesa main branch.
 - Install an editable version with developer requirements locally: ``pip install -e .[dev]``
 - Edit the code. Save.
 - Git add the new files and files with changes: ``git add FILE_NAME``
 - Git commit your changes with a meaningful message: ``git commit -m "Fixes X issue."``
 - If implementing a new feature, include some documentation in docs folder.
-- Make sure that your submission passes the `Travis build`_. See "Testing and Standards below" to be able to run these locally.
+- Make sure that your submission passes the `GH Actions build`_. See "Testing and Standards below" to be able to run these locally.
 - Make sure that your code is formatted according to `the black`_ standard (you can do it via `pre-commit`_).
 - Push your changes to your fork on Github: ``git push origin NAME_OF_BRANCH``.
 - `Create a pull request`_.
 - Describe the change w/ ticket number(s) that the code fixes.
 
 .. _`Clone your repository` : https://help.github.com/articles/cloning-a-repository/
-.. _`Travis build` : https://travis-ci.org/projectmesa/mesa
+.. _`GH Actions build` : https://github.com/projectmesa/mesa/actions/workflows/build_lint.yml
 .. _`Create a pull request` : https://help.github.com/articles/creating-a-pull-request/
 .. _`pre-commit` : https://github.com/pre-commit/pre-commit
 .. _`black` : https://github.com/psf/black
@@ -54,7 +55,7 @@ Testing and Code Standards
 .. image:: https://img.shields.io/badge/code%20style-black-000000.svg
     :target: https://github.com/psf/black
 
-As part of our contribution process, we practice continuous integration and use Travis to help enforce best practices.
+As part of our contribution process, we practice continuous integration and use GH Actions to help enforce best practices.
 
 If you're changing previous Mesa features, please make sure of the following:
 
