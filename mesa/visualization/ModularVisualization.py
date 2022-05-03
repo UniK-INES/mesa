@@ -244,10 +244,10 @@ class ModularServer(tornado.web.Application):
     max_steps = 100000
 
     # Handlers and other globals:
-    page_handler = (r"/" + urlpath, PageHandler)
+    page_handler = (r"/" + urlpath + "/", PageHandler)
     socket_handler = (r"/ws", SocketHandler)
     static_handler = (
-        r"/static/(.*)",
+        r"/" + urlpath + "/static/(.*)",
         tornado.web.StaticFileHandler,
         {"path": os.path.dirname(__file__) + "/templates"},
     )
@@ -363,7 +363,7 @@ class ModularServer(tornado.web.Application):
         if port is not None:
             self.port = port
 
-        url = f"http://127.0.0.1:{self.port}/" + self.urlpath
+        url = f"http://127.0.0.1:{self.port}/" + self.urlpath + "/"
         print(f"Interface starting at {url}")
         self.listen(self.port)
         if open_browser:
