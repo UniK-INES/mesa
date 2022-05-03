@@ -240,7 +240,7 @@ class ModularServer(tornado.web.Application):
     verbose = True
 
     port = int(os.getenv("PORT", 8521))  # Default port to listen on
-    urlpath = str(os.getenv("URLPATH", ""))
+    urlpath = str(os.getenv("URLPATH", "")).strip("/")
     max_steps = 100000
 
     # Handlers and other globals:
@@ -334,9 +334,15 @@ class ModularServer(tornado.web.Application):
         self.js_code = []
         for element in self.visualization_elements:
             for include_file in element.package_includes:
-                self.package_includes.add(include_file)
+                if self._is_stylesheet(include_file):
+                    self.package_css_includes.add(include_file)
+                else:
+                    self.package_js_includes.add(include_file)
             for include_file in element.local_includes:
-                self.local_includes.add(include_file)
+                if self._is_stylesheet(include_file):
+                    self.local_css_includes.add(include_file)
+                else:
+                    self.local_js_includes.add(include_file)
             self.js_code.append(element.js_code)
 
         # super().find_handler("/").get()
@@ -352,12 +358,10 @@ class ModularServer(tornado.web.Application):
             visualization_state.append(element_state)
         return visualization_state
 
-    def launch(self, port=None, open_browser=True, urlpath=None):
+    def launch(self, port=None, open_browser=True):
         """Run the app."""
         if port is not None:
             self.port = port
-        if urlpath is not None:
-            self.urlpath = urlpath
 
         url = f"http://127.0.0.1:{self.port}/" + self.urlpath
         print(f"Interface starting at {url}")
