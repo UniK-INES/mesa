@@ -165,6 +165,9 @@ class VisualizationElement:
 class PageHandler(tornado.web.RequestHandler):
     """Handler for the HTML template which holds the visualization."""
 
+    def head(self):
+        self.set_header("Content-Type", "text/html")
+
     def get(self):
         elements = self.application.visualization_elements
         for i, element in enumerate(elements):
