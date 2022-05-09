@@ -146,7 +146,7 @@ class Grid:
     ) -> Union[GridContent, List[GridContent]]:
         """Access contents from the grid."""
 
-        if isinstance(index, int):
+        if isinstance(index, int) or isinstance(index, np.integer):
             # grid[x]
             return self.grid[index]
         elif isinstance(index[0], tuple):
