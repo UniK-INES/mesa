@@ -281,6 +281,11 @@ class ModularServer(tornado.web.Application):
         """
 
         self.verbose = True
+
+        self.port = int(os.getenv("PORT", 8521))  # Default port to listen on
+        self.urlpath = str(os.getenv("URLPATH", "")).strip("/")
+        if len(self.urlpath) > 0:
+            self.urlpath += "/"
         self.max_steps = 100000
 
         if port is not None:
@@ -290,15 +295,15 @@ class ModularServer(tornado.web.Application):
             self.port = int(os.getenv("PORT", 8521))
 
         # Handlers and other globals:
-        page_handler = (r"/", PageHandler)
-        socket_handler = (r"/ws", SocketHandler)
+        page_handler = (r"/" + self.urlpath, PageHandler)
+        socket_handler = (r"/" + self.urlpath + "ws", SocketHandler)
         static_handler = (
-            r"/static/(.*)",
+            r"/" + self.urlpath + "static/(.*)",
             tornado.web.StaticFileHandler,
             {"path": os.path.dirname(__file__) + "/templates"},
         )
         custom_handler = (
-            r"/local/custom/(.*)",
+            r"/" + self.urlpath + "local/custom/(.*)",
             tornado.web.StaticFileHandler,
             {"path": ""},
         )
@@ -385,7 +390,7 @@ class ModularServer(tornado.web.Application):
         # We specify the `running` attribute here so that the user doesn't have
         # to define it explicitly in their model's __init__.
         self.model.running = True
-        
+
         self.js_code = []
         for element in self.visualization_elements:
             for include_file in element.package_includes:
@@ -399,8 +404,8 @@ class ModularServer(tornado.web.Application):
                 else:
                     self.local_js_includes.add(include_file)
             self.js_code.append(element.js_code)
-        
-        #super().find_handler("/").get()
+
+        # super().find_handler("/").get()
 
     def render_model(self):
         """Turn the current state of the model into a dictionary of
