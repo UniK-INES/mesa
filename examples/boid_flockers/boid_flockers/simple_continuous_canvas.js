@@ -14,6 +14,7 @@ const ContinuousVisualization = function(width, height, context) {
 		const cy = y * height;
 		const r = radius;
 
+
 		context.beginPath();
 		context.arc(cx, cy, r, 0, Math.PI * 2, false);
 		context.closePath();
@@ -25,7 +26,7 @@ const ContinuousVisualization = function(width, height, context) {
 			context.fillStyle = color;
 			context.fill();
 		}
-		
+
 		// This part draws the text inside the Circle
         if (text !== undefined) {
                 context.fillStyle = text_color;

@@ -33,9 +33,9 @@ class BoidFlockers(mesa.Model):
         traceAgent=False,
         initialAge=5,
         minimum_separation=1.0,
-        max_separate_angle = 1.5,
-        max_cohere_angle = 3.0,
-        max_align_angle = 5.0
+        max_separate_angle=1.5,
+        max_cohere_angle=3.0,
+        max_align_angle=5.0,
     ):
         """
         Create a new Flockers model.
@@ -59,23 +59,24 @@ class BoidFlockers(mesa.Model):
         self.factors = dict(cohere=cohere, separate=separate, match=match)
         self.make_agents()
         self.running = True
-        
+
         self.traceAgent = traceAgent
         self.initialAge = initialAge
         self.traces = population + 100
-        
+
         self.max_separate_angle = max_separate_angle
-        self.max_cohere_angle =  max_cohere_angle
+        self.max_cohere_angle = max_cohere_angle
         self.max_align_angle = max_align_angle
         self.minimum_separation = minimum_separation
 
         self.log = logging.getLogger("boid")
-        logging.basicConfig(level=logging.INFO, format=' %(asctime)s -%(levelname)s - %(message)s')
-        
+        logging.basicConfig(
+            level=logging.INFO, format=" %(asctime)s -%(levelname)s - %(message)s"
+        )
+
         logger = logging.getLogger("boid_8")
         logger.setLevel(logging.DEBUG)
 
-        
     def make_agents(self):
         """
         Create self.population agents, with random positions and starting headings.

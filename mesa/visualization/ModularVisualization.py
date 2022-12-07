@@ -407,6 +407,22 @@ class ModularServer(tornado.web.Application):
 
         # super().find_handler("/").get()
 
+        self.js_code = []
+        for element in self.visualization_elements:
+            for include_file in element.package_includes:
+                if self._is_stylesheet(include_file):
+                    self.package_css_includes.add(include_file)
+                else:
+                    self.package_js_includes.add(include_file)
+            for include_file in element.local_includes:
+                if self._is_stylesheet(include_file):
+                    self.local_css_includes.add(include_file)
+                else:
+                    self.local_js_includes.add(include_file)
+            self.js_code.append(element.js_code)
+
+        # super().find_handler("/").get()
+
     def render_model(self):
         """Turn the current state of the model into a dictionary of
         visualizations
