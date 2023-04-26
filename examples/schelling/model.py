@@ -1,5 +1,11 @@
 import mesa
 
+from mesa.space import Coordinate, SingleGrid
+from mesa.time import RandomActivation
+from mesa.datacollection import DataCollector
+
+import numpy as np
+
 
 class SchellingAgent(mesa.Agent):
     """
@@ -21,12 +27,19 @@ class SchellingAgent(mesa.Agent):
 
     def step(self):
         similar = 0
-        for neighbor in self.model.grid.iter_neighbors(self.pos, True):
+        all = 0
+
+        for neighbor in self.model.grid.iter_neighbors(
+            self.pos,
+            moore=self.model.perception_moore,
+            radius=self.model.perception_radius,
+        ):
+            all += 1
             if neighbor.type == self.type:
                 similar += 1
 
         # If unhappy, move:
-        if similar < self.model.homophily:
+        if all == 0 or similar / all < self.model.homophily:
             self.model.grid.move_to_empty(self)
         else:
             self.model.happy += 1
@@ -37,8 +50,23 @@ class Schelling(mesa.Model):
     Model class for the Schelling segregation model.
     """
 
-    def __init__(self, width=20, height=20, density=0.8, minority_pc=0.2, homophily=3):
+    NEIGHBOURHOOD_MOORE = "Moore"
+    NEIGHBOURHOOD_VON_NEUMANN = "von Neumann"
+
+    def __init__(
+        self,
+        width=20,
+        height=20,
+        density=0.8,
+        minority_pc=0.2,
+        homophily=3 / 8,
+        perception_neighbourhood="Moore",
+        perception_radius=1,
+        seed=0,
+    ):
         """ """
+
+        np.random.seed(seed)
 
         self.width = width
         self.height = height
@@ -46,15 +74,20 @@ class Schelling(mesa.Model):
         self.minority_pc = minority_pc
         self.homophily = homophily
 
-        self.schedule = mesa.time.RandomActivation(self)
-        self.grid = mesa.space.SingleGrid(width, height, torus=True)
+        self.schedule = RandomActivation(self)
+        self.grid = SingleGrid(width, height, torus=True)
 
         self.happy = 0
-        self.datacollector = mesa.DataCollector(
+        self.datacollector = DataCollector(
             {"happy": "happy"},  # Model-level count of happy agents
             # For testing purposes, agent's individual x and y
-            {"x": lambda a: a.pos[0], "y": lambda a: a.pos[1]},
+            # {"x": lambda a: a.pos[0], "y": lambda a: a.pos[1]},
         )
+
+        self.perception_moore = (
+            True if perception_neighbourhood == Schelling.NEIGHBOURHOOD_MOORE else False
+        )
+        self.perception_radius = perception_radius
 
         # Set up agents
         # We use a grid iterator that returns
@@ -87,3 +120,8 @@ class Schelling(mesa.Model):
 
         if self.happy == self.schedule.get_agent_count():
             self.running = False
+
+    def run(self, n):
+        """Run the model for n steps."""
+        for _ in range(n):
+            self.step()
