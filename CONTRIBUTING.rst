@@ -28,11 +28,12 @@ discuss via `Matrix`_ OR via `an issue`_.
 - `Clone your repository`_ from Github to your machine.
 - Create a new branch in your fork: ``git checkout -b BRANCH_NAME``
 - Run ``git config pull.rebase true``. This prevents messy merge commits when updating your branch on top of Mesa main branch.
-- Install an editable version with developer requirements locally: ``pip install -e .[dev]``
+- Install an editable version with developer requirements locally: ``pip install -e ".[dev]"``
 - Edit the code. Save.
 - Git add the new files and files with changes: ``git add FILE_NAME``
 - Git commit your changes with a meaningful message: ``git commit -m "Fix issue X"``
 - If implementing a new feature, include some documentation in docs folder.
+- Make sure that your submission works with a few of the examples in the examples repository. If adding a new feature to mesa, please illustrate usage by implementing it in an example.
 - Make sure that your submission passes the `GH Actions build`_. See "Testing and Standards below" to be able to run these locally.
 - Make sure that your code is formatted according to `the black`_ standard (you can do it via `pre-commit`_).
 - Push your changes to your fork on Github: ``git push origin NAME_OF_BRANCH``.
@@ -67,11 +68,11 @@ If you're changing previous Mesa features, please make sure of the following:
 - Additional features or rewrites of current features are accompanied by tests.
 - New features are demonstrated in a model, so folks can understand more easily.
 
-To ensure that your submission will not break the build, you will need to install Flake8 and pytest.
+To ensure that your submission will not break the build, you will need to install Ruff and pytest.
 
 .. code-block:: bash
 
-    pip install flake8 pytest pytest-cov
+    pip install ruff pytest pytest-cov
 
 We test by implementing simple models and through traditional unit tests in the tests/ folder. The following only covers unit tests coverage. Ensure that your test coverage has not gone down. If it has and you need help, we will offer advice on how to structure tests for the contribution.
 
@@ -90,7 +91,7 @@ You should no longer have to worry about code formatting. If still in doubt you 
 
 .. code-block:: bash
 
-    flake8 . --ignore=F403,E501,E123,E128,W504,W503 --exclude=docs,build
+    ruff .
 
 
 .. _`PEP8` : https://www.python.org/dev/peps/pep-0008

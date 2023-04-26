@@ -9,10 +9,10 @@ from __future__ import annotations
 
 import random
 
-from mesa.datacollection import DataCollector
-
 # mypy
 from typing import Any
+
+from mesa.datacollection import DataCollector
 
 
 class Model:
@@ -48,7 +48,6 @@ class Model:
 
     def step(self) -> None:
         """A single step. Fill in here."""
-        pass
 
     def next_id(self) -> int:
         """Return the next unique ID for agents, increment current_id"""

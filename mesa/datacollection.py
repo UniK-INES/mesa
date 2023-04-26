@@ -34,11 +34,12 @@ The default DataCollector here makes several assumptions:
     * The schedule has an agent list called agents
     * For collecting agent-level variables, agents must have a unique_id
 """
-from functools import partial
 import itertools
-from operator import attrgetter
-import pandas as pd
 import types
+from functools import partial
+from operator import attrgetter
+
+import pandas as pd
 
 
 class DataCollector:
@@ -83,9 +84,10 @@ class DataCollector:
             Model reporters can take four types of arguments:
             lambda like above:
             {"agent_count": lambda m: m.schedule.get_agent_count() }
-            method with @property decorators
-            {"agent_count": schedule.get_agent_count()
-            class attributes of model
+            method of a class/instance:
+            {"agent_count": self.get_agent_count} # self here is a class instance
+            {"agent_count": Model.get_agent_count} # Model here is a class
+            class attributes of a model
             {"model_attribute": "model_attribute"}
             functions with parameters that have placed in a list
             {"Model_Function":[function, [param_1, param_2]]}
@@ -117,8 +119,6 @@ class DataCollector:
             reporter: Attribute string, or function object that returns the
                       variable when given a model instance.
         """
-        if type(reporter) is str:
-            reporter = partial(self._getattr, reporter)
         self.model_reporters[name] = reporter
         self.model_vars[name] = []
 
@@ -163,25 +163,23 @@ class DataCollector:
         agent_records = map(get_reports, model.schedule.agents)
         return agent_records
 
-    def _reporter_decorator(self, reporter):
-        return reporter()
-
     def collect(self, model):
         """Collect all the data for the given model object."""
         if self.model_reporters:
-
             for var, reporter in self.model_reporters.items():
                 # Check if Lambda operator
                 if isinstance(reporter, types.LambdaType):
                     self.model_vars[var].append(reporter(model))
                 # Check if model attribute
-                elif isinstance(reporter, partial):
-                    self.model_vars[var].append(reporter(model))
+                elif isinstance(reporter, str):
+                    self.model_vars[var].append(getattr(model, reporter, None))
                 # Check if function with arguments
                 elif isinstance(reporter, list):
                     self.model_vars[var].append(reporter[0](*reporter[1]))
+                # TODO: Check if method of a class, as of now it is assumed
+                # implicitly if the other checks fail.
                 else:
-                    self.model_vars[var].append(self._reporter_decorator(reporter))
+                    self.model_vars[var].append(reporter())
 
         if self.agent_reporters:
             agent_records = self._record_agents(model)
@@ -218,6 +216,12 @@ class DataCollector:
         The DataFrame has one column for each model variable, and the index is
         (implicitly) the model tick.
         """
+        # Check if self.model_reporters dictionary is empty, if so raise warning
+        if not self.model_reporters:
+            raise UserWarning(
+                "No model reporters have been defined in the DataCollector, returning empty DataFrame."
+            )
+
         return pd.DataFrame(self.model_vars)
 
     def get_agent_vars_dataframe(self):
@@ -226,14 +230,20 @@ class DataCollector:
         The DataFrame has one column for each variable, with two additional
         columns for tick and agent_id.
         """
+        # Check if self.agent_reporters dictionary is empty, if so raise warning
+        if not self.agent_reporters:
+            raise UserWarning(
+                "No agent reporters have been defined in the DataCollector, returning empty DataFrame."
+            )
+
         all_records = itertools.chain.from_iterable(self._agent_records.values())
         rep_names = list(self.agent_reporters)
 
         df = pd.DataFrame.from_records(
             data=all_records,
-            columns=["Step", "AgentID"] + rep_names,
+            columns=["Step", "AgentID", *rep_names],
+            index=["Step", "AgentID"],
         )
-        df = df.set_index(["Step", "AgentID"])
         return df
 
     def get_table_dataframe(self, table_name):

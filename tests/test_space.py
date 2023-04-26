@@ -4,11 +4,8 @@ import networkx as nx
 import numpy as np
 import pytest
 
-from mesa.space import ContinuousSpace
-from mesa.space import SingleGrid
-from mesa.space import NetworkGrid
+from mesa.space import ContinuousSpace, NetworkGrid, SingleGrid
 from tests.test_grid import MockAgent
-
 
 TEST_AGENTS = [(-20, -20), (-20, -20.05), (65, 18)]
 TEST_AGENTS_GRID = [(1, 1), (10, 0), (10, 10)]
@@ -302,10 +299,10 @@ class TestSingleGrid(unittest.TestCase):
         for i, pos in enumerate(TEST_AGENTS_GRID):
             a = self.agents[i]
             assert a.pos == pos
-            assert self.space.grid[pos[0]][pos[1]] == a
+            assert self.space[pos[0]][pos[1]] == a
             self.space.remove_agent(a)
             assert a.pos is None
-            assert self.space.grid[pos[0]][pos[1]] is None
+            assert self.space[pos[0]][pos[1]] is None
 
     def test_empty_cells(self):
         if self.space.exists_empty_cells():
@@ -325,12 +322,12 @@ class TestSingleGrid(unittest.TestCase):
         _agent = self.agents[agent_number]
 
         assert _agent.pos == initial_pos
-        assert self.space.grid[initial_pos[0]][initial_pos[1]] == _agent
-        assert self.space.grid[final_pos[0]][final_pos[1]] is None
+        assert self.space[initial_pos[0]][initial_pos[1]] == _agent
+        assert self.space[final_pos[0]][final_pos[1]] is None
         self.space.move_agent(_agent, final_pos)
         assert _agent.pos == final_pos
-        assert self.space.grid[initial_pos[0]][initial_pos[1]] is None
-        assert self.space.grid[final_pos[0]][final_pos[1]] == _agent
+        assert self.space[initial_pos[0]][initial_pos[1]] is None
+        assert self.space[final_pos[0]][final_pos[1]] == _agent
 
 
 class TestSingleNetworkGrid(unittest.TestCase):
@@ -340,7 +337,7 @@ class TestSingleNetworkGrid(unittest.TestCase):
         """
         Create a test network grid and populate with Mock Agents.
         """
-        G = nx.complete_graph(TestSingleNetworkGrid.GRAPH_SIZE)
+        G = nx.cycle_graph(TestSingleNetworkGrid.GRAPH_SIZE)  # noqa: N806
         self.space = NetworkGrid(G)
         self.agents = []
         for i, pos in enumerate(TEST_AGENTS_NETWORK_SINGLE):
@@ -357,14 +354,10 @@ class TestSingleNetworkGrid(unittest.TestCase):
             assert a.pos == pos
 
     def test_get_neighbors(self):
-        assert (
-            len(self.space.get_neighbors(0, include_center=True))
-            == TestSingleNetworkGrid.GRAPH_SIZE
-        )
-        assert (
-            len(self.space.get_neighbors(0, include_center=False))
-            == TestSingleNetworkGrid.GRAPH_SIZE - 1
-        )
+        assert len(self.space.get_neighbors(0, include_center=True)) == 3
+        assert len(self.space.get_neighbors(0, include_center=False)) == 2
+        assert len(self.space.get_neighbors(2, include_center=True, radius=3)) == 7
+        assert len(self.space.get_neighbors(2, include_center=False, radius=3)) == 6
 
     def test_move_agent(self):
         initial_pos = 1
@@ -415,7 +408,7 @@ class TestMultipleNetworkGrid(unittest.TestCase):
         """
         Create a test network grid and populate with Mock Agents.
         """
-        G = nx.complete_graph(TestMultipleNetworkGrid.GRAPH_SIZE)
+        G = nx.complete_graph(TestMultipleNetworkGrid.GRAPH_SIZE)  # noqa: N806
         self.space = NetworkGrid(G)
         self.agents = []
         for i, pos in enumerate(TEST_AGENTS_NETWORK_MULTIPLE):

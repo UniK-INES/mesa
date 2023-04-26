@@ -4,13 +4,14 @@ Test the advanced schedulers.
 
 import unittest
 from unittest import TestCase, mock
-from mesa import Model, Agent
+
+from mesa import Agent, Model
 from mesa.time import (
     BaseScheduler,
-    StagedActivation,
     RandomActivation,
-    SimultaneousActivation,
     RandomActivationByType,
+    SimultaneousActivation,
+    StagedActivation,
 )
 
 RANDOM = "random"
@@ -108,7 +109,7 @@ class TestStagedActivation(TestCase):
         model = MockModel(shuffle=False)
         model.step()
         model.step()
-        assert all([i == j for i, j in zip(model.log[:4], model.log[4:])])
+        assert all(i == j for i, j in zip(model.log[:4], model.log[4:]))
 
     def test_shuffle(self):
         """
@@ -187,7 +188,7 @@ class TestRandomActivation(TestCase):
         model.step()
         agent_steps = [i.steps for i in model.schedule.agents]
         # one step for each of 2 agents
-        assert all(map(lambda x: x == 1, agent_steps))
+        assert all(x == 1 for x in agent_steps)
 
     def test_intrastep_remove(self):
         """
@@ -213,8 +214,8 @@ class TestSimultaneousActivation(TestCase):
         # one step for each of 2 agents
         agent_steps = [i.steps for i in model.schedule.agents]
         agent_advances = [i.advances for i in model.schedule.agents]
-        assert all(map(lambda x: x == 1, agent_steps))
-        assert all(map(lambda x: x == 1, agent_advances))
+        assert all(x == 1 for x in agent_steps)
+        assert all(x == 1 for x in agent_advances)
 
 
 class TestRandomActivationByType(TestCase):
@@ -253,7 +254,7 @@ class TestRandomActivationByType(TestCase):
         model.step()
         agent_steps = [i.steps for i in model.schedule.agents]
         # one step for each of 2 agents
-        assert all(map(lambda x: x == 1, agent_steps))
+        assert all(x == 1 for x in agent_steps)
 
     def test_add_non_unique_ids(self):
         """

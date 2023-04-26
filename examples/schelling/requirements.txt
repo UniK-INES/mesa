@@ -1,3 +1,0 @@
-jupyter
-matplotlib
-git+https://github.com/UniK-INES/mesa@ines_edu

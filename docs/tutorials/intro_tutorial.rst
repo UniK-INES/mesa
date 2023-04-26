@@ -6,91 +6,117 @@ Tutorial Description
 
 `Mesa <https://github.com/projectmesa/mesa>`__ is a Python framework for
 `agent-based
-modeling <https://en.wikipedia.org/wiki/Agent-based_model>`__. Getting
-started with Mesa is easy. In this tutorial, we will walk through
-creating a simple model and progressively add functionality which will
-illustrate Mesa’s core features.
-
-**Note:** This tutorial is a work-in-progress. If you find any errors or
-bugs, or just find something unclear or confusing, `let us
+modeling <https://en.wikipedia.org/wiki/Agent-based_model>`__. This
+tutorial will assist you in getting started. Working through the
+tutorial will help you discover the core features of Mesa. Through the
+tutorial, you are walked through creating a starter-level model.
+Functionality is added progressively as the process unfolds. Should
+anyone find any errors, bugs, have a suggestion, or just are looking for
+clarification, `let us
 know <https://github.com/projectmesa/mesa/issues>`__!
 
-The base for this tutorial is a very simple model of agents exchanging
-money. Next, we add *space* to allow agents to move. Then, we’ll cover
-two of Mesa’s analytic tools: the *data collector* and *batch runner*.
-After that, we’ll add an *interactive visualization* which lets us watch
-the model as it runs. Finally, we go over how to write your own
-visualization module, for users who are comfortable with JavaScript.
+The premise of this tutorial is to create a starter-level model
+representing agents exchanging money. This exchange of money affects
+wealth. Next, *space* is added to allow agents to move based on the
+change in wealth as time progresses.
 
-You can also find all the code this tutorial describes in the
-**examples/boltzmann_wealth_model** directory of the Mesa repository.
+Two of Mesa’s analytic tools: the *data collector* and *batch runner*
+will be used to examine this movement. After that an *interactive
+visualization* is added which allows model viewing as it runs.
 
-Sample Model Description
-------------------------
+Finally, the creation of a custom visualization module in JavaScript is
+explored.
 
-The tutorial model is a very simple simulated agent-based economy, drawn
-from econophysics and presenting a statistical mechanics approach to
-wealth distribution [Dragulescu2002]. The rules of our tutorial model:
+Model Description
+-----------------
+
+This is a starter-level simulated agent-based economy. In an agent-based
+economy, the behavior of an individual economic agent, such as a
+consumer or producer, is studied in a market environment. This model is
+drawn from the field econophysics, specifically a paper prepared by
+Drăgulescu et al. for additional information on the modeling assumptions
+used in this model. [Drăgulescu, 2002].
+
+The assumption that govern this model are:
 
 1. There are some number of agents.
 2. All agents begin with 1 unit of money.
 3. At every step of the model, an agent gives 1 unit of money (if they
    have it) to some other agent.
 
-Despite its simplicity, this model yields results that are often
-unexpected to those not familiar with it. For our purposes, it also
-easily demonstrates Mesa’s core features.
+Even as a starter-level model the yielded results are both interesting
+and unexpected to individuals unfamiliar with it the specific topic. As
+such, this model is a good starting point to examine Mesa’s core
+features.
 
-Let’s get started.
+Tutorial Setup
+~~~~~~~~~~~~~~
 
-Installation
-~~~~~~~~~~~~
+Create and activate a `virtual
+environment <http://docs.python-guide.org/en/latest/dev/virtualenvs/>`__.
+*Python version 3.8 or higher is required*.
 
-To start, install Mesa. We recommend doing this in a `virtual
-environment <https://virtualenvwrapper.readthedocs.org/en/stable/>`__,
-but make sure your environment is set up with Python 3. Mesa requires
-Python3 and does not work in Python 2 environments.
-
-To install Mesa, simply:
+Install Mesa:
 
 .. code:: bash
 
-       $ pip install mesa
+   python3 -m pip install mesa
 
-When you do that, it will install Mesa itself, as well as any
-dependencies that aren’t in your setup yet. Additional dependencies
-required by this tutorial can be found in the
-**examples/boltzmann_wealth_model/requirements.txt** file, which can be
-installed directly form the github repository by running:
+Install Jupyter Notebook (optional):
 
 .. code:: bash
 
-       $ pip install -r https://raw.githubusercontent.com/projectmesa/mesa/main/examples/boltzmann_wealth_model/requirements.txt
+   python3 -m pip install jupyter
 
-| This will install the dependencies listed in the requirements.txt file
-  which are:
-| - jupyter (Ipython interactive notebook)
-| - matplotlib (Python’s visualization library)
-| - mesa (this ABM library – if not installed)
-| - numpy (Python’s numerical python library)
+Install matplotlib:
 
-Building a sample model
------------------------
+.. code:: bash
 
-Once Mesa is installed, you can start building our model. You can write
-models in two different ways:
+   python3 -m pip install matplotlib
 
-1. Write the code in its own file with your favorite text editor, or
-2. Write the model interactively in `Jupyter
-   Notebook <http://jupyter.org/>`__ cells.
+Building the Sample Model
+-------------------------
 
-Either way, it’s good practice to put your model in its own folder –
-especially if the project will end up consisting of multiple files (for
-example, Python files for the model and the visualization, a Notebook
-for analysis, and a Readme with some documentation and discussion).
+After Mesa is installed a model can be built. A jupyter notebook is
+recommended for this tutorial, this allows for small segments of codes
+to be examined one at a time. As an option this can be created using
+python script files.
 
-Begin by creating a folder, and either launch a Notebook or create a new
-Python source file. We will use the name ``money_model.py`` here.
+**Good Practice:** Place a model in its own folder/directory. This is
+not specifically required for the starter_model, but as other models
+become more complicated and expand multiple python scripts,
+documentation, discussions and notebooks may be added.
+
+Create New Folder/Directory
+~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+-  Using operating system commands create a new folder/directory named
+   ‘starter_model’.
+
+-  Change into the new folder/directory.
+
+Creating Model With Jupyter Notebook
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Write the model interactively in `Jupyter
+Notebook <http://jupyter.org/>`__ cells.
+
+Start Jupyter Notebook:
+
+.. code:: bash
+
+   jupyter notebook
+
+Create a new Notebook named ``money_model.ipynb`` (or whatever you want
+to call it).
+
+Creating Model With Script File (IDE, Text Editor, Colab, etc.)
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Create a new file called ``money_model.py`` (or whatever you want to
+call it)
+
+*Code will be added as the tutorial progresses.*
 
 Setting up the model
 ~~~~~~~~~~~~~~~~~~~~
@@ -233,16 +259,16 @@ Then create the model object, and run it for one step:
 
 .. parsed-literal::
 
-    Hi, I am agent 6.
-    Hi, I am agent 2.
-    Hi, I am agent 1.
-    Hi, I am agent 0.
-    Hi, I am agent 4.
     Hi, I am agent 5.
-    Hi, I am agent 3.
-    Hi, I am agent 9.
+    Hi, I am agent 2.
+    Hi, I am agent 4.
     Hi, I am agent 8.
+    Hi, I am agent 0.
+    Hi, I am agent 1.
     Hi, I am agent 7.
+    Hi, I am agent 9.
+    Hi, I am agent 3.
+    Hi, I am agent 6.
 
 
 Exercise
@@ -339,14 +365,14 @@ this line, to make the graph appear.
 
 .. parsed-literal::
 
-    (array([2., 0., 0., 0., 0., 6., 0., 0., 0., 2.]),
-     array([0. , 0.2, 0.4, 0.6, 0.8, 1. , 1.2, 1.4, 1.6, 1.8, 2. ]),
+    (array([5., 0., 0., 2., 0., 0., 1., 0., 0., 2.]),
+     array([0. , 0.3, 0.6, 0.9, 1.2, 1.5, 1.8, 2.1, 2.4, 2.7, 3. ]),
      <BarContainer object of 10 artists>)
 
 
 
 
-.. image:: intro_tutorial_files/output_19_1.png
+.. image:: intro_tutorial_files%5Cintro_tutorial_19_1.png
 
 
 You’ll should see something like the distribution above. Yours will
@@ -378,14 +404,14 @@ can do this with a nested for loop:
 
 .. parsed-literal::
 
-    (array([433., 304., 150.,  71.,  29.,  13.]),
-     array([0, 1, 2, 3, 4, 5, 6]),
+    (array([416., 324., 155.,  68.,  25.,  12.]),
+     array([0., 1., 2., 3., 4., 5., 6.]),
      <BarContainer object of 6 artists>)
 
 
 
 
-.. image:: intro_tutorial_files/output_22_1.png
+.. image:: intro_tutorial_files%5Cintro_tutorial_22_1.png
 
 
 This runs 100 instantiations of the model, and runs each for 10 steps.
@@ -616,12 +642,12 @@ grid, giving us each cell’s coordinates and contents in turn.
 
 .. parsed-literal::
 
-    <matplotlib.colorbar.Colorbar at 0x2505197baf0>
+    <matplotlib.colorbar.Colorbar at 0x18a6d887f10>
 
 
 
 
-.. image:: intro_tutorial_files/output_32_1.png
+.. image:: intro_tutorial_files%5Cintro_tutorial_32_1.png
 
 
 Collecting Data
@@ -653,7 +679,7 @@ the schedule, associating the resulting value with the step of the
 model, and the agent’s ``unique_id``.
 
 Let’s add a DataCollector to the model with
-`mesa.DataCollector <https://github.com/projectmesa/mesa/blob/main/mesa/datacollection.py>`__,
+```mesa.DataCollector`` <https://github.com/projectmesa/mesa/blob/main/mesa/datacollection.py>`__,
 and collect two variables. At the agent level, we want to collect every
 agent’s wealth at every step. At the model level, let’s measure the
 model’s `Gini
@@ -686,10 +712,15 @@ measure of wealth inequality.
 
         def give_money(self):
             cellmates = self.model.grid.get_cell_list_contents([self.pos])
+            cellmates.pop(
+                cellmates.index(self)
+            )  # Ensure agent is not giving money to itself
             if len(cellmates) > 1:
                 other = self.random.choice(cellmates)
                 other.wealth += 1
                 self.wealth -= 1
+                if other == self:
+                    print("I JUST GAVE MONEY TO MYSELF HEHEHE!")
 
         def step(self):
             self.move()
@@ -756,12 +787,12 @@ To get the series of Gini coefficients as a pandas DataFrame:
 
 .. parsed-literal::
 
-    <AxesSubplot:>
+    <Axes: >
 
 
 
 
-.. image:: intro_tutorial_files/output_38_1.png
+.. image:: intro_tutorial_files%5Cintro_tutorial_38_1.png
 
 
 Similarly, we can get the agent-wealth data:
@@ -845,12 +876,12 @@ example, to get a histogram of agent wealth at the model’s end:
 
 .. parsed-literal::
 
-    <AxesSubplot:>
+    <Axes: >
 
 
 
 
-.. image:: intro_tutorial_files/output_42_1.png
+.. image:: intro_tutorial_files%5Cintro_tutorial_42_1.png
 
 
 Or to plot the wealth of a given agent (in this example, agent 14):
@@ -865,12 +896,12 @@ Or to plot the wealth of a given agent (in this example, agent 14):
 
 .. parsed-literal::
 
-    <AxesSubplot:xlabel='Step'>
+    <Axes: xlabel='Step'>
 
 
 
 
-.. image:: intro_tutorial_files/output_44_1.png
+.. image:: intro_tutorial_files%5Cintro_tutorial_44_1.png
 
 
 You can also use pandas to export the data to a CSV (comma separated
@@ -896,7 +927,8 @@ Like we mentioned above, you usually won’t run a model only once, but
 multiple times, with fixed parameters to find the overall distributions
 the model generates, and with varying parameters to analyze how they
 drive the model’s outputs and behaviors. Instead of needing to write
-nested for-loops for each model, Mesa provides a `batch_run <https://github.com/projectmesa/mesa/blob/main/mesa/batchrunner.py>`__
+nested for-loops for each model, Mesa provides a
+```batch_run`` <https://github.com/projectmesa/mesa/blob/main/mesa/batchrunner.py>`__
 function which automates it for you.
 
 The batch runner also requires an additional variable ``self.running``
@@ -1016,7 +1048,7 @@ it.
 
 .. parsed-literal::
 
-    245it [00:34,  7.02it/s]
+    100%|████████████████████████████████████████████████████████████████████████████████| 245/245 [00:21<00:00, 11.21it/s]
 
 
 To further analyze the return of the ``batch_run`` function, we convert
@@ -1058,12 +1090,12 @@ calling the batch run.
 
 .. parsed-literal::
 
-    <matplotlib.collections.PathCollection at 0x250bd5b41c0>
+    <matplotlib.collections.PathCollection at 0x18a6fba03d0>
 
 
 
 
-.. image:: intro_tutorial_files/output_57_1.png
+.. image:: intro_tutorial_files%5Cintro_tutorial_57_1.png
 
 
 Second, we want to display the agent’s wealth at each time step of one
@@ -1105,20 +1137,20 @@ can use the ``to_html()`` function which takes the same arguments as
         0        7       1
         0        8       1
         0        9       1
-        1        0       2
+        1        0       1
         1        1       1
-    ...        ...     ...
-       99        8       4
+      ...      ...     ...
+       99        8       2
        99        9       1
-      100        0       0
-      100        1       0
+      100        0       1
+      100        1       1
       100        2       1
-      100        3       0
+      100        3       1
       100        4       1
       100        5       1
-      100        6       0
-      100        7       2
-      100        8       4
+      100        6       1
+      100        7       0
+      100        8       2
       100        9       1
 
 
@@ -1143,18 +1175,18 @@ episode.
         2  0.18
         3  0.18
         4  0.18
-        5  0.32
-        6  0.32
-        7  0.32
-        8  0.42
-        9  0.42
-       10  0.42
-       11  0.42
-    ...     ...
-       89  0.66
-       90  0.66
-       91  0.66
-       92  0.66
+        5  0.18
+        6  0.18
+        7  0.18
+        8  0.18
+        9  0.18
+       10  0.18
+       11  0.18
+      ...   ...
+       89  0.54
+       90  0.54
+       91  0.56
+       92  0.56
        93  0.56
        94  0.56
        95  0.56
@@ -1171,9 +1203,6 @@ Happy Modeling!
 This document is a work in progress. If you see any errors, exclusions
 or have any problems please contact
 `us <https://github.com/projectmesa/mesa/issues>`__.
-
-``virtual environment``:
-http://docs.python-guide.org/en/latest/dev/virtualenvs/
 
 [Comer2014] Comer, Kenneth W. “Who Goes First? An Examination of the
 Impact of Activation on Outcome Behavior in AgentBased Models.” George

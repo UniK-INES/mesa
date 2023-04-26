@@ -97,15 +97,16 @@ Client -> Server:
 import asyncio
 import os
 import platform
+import webbrowser
+
 import tornado.autoreload
+import tornado.escape
+import tornado.gen
 import tornado.ioloop
 import tornado.web
 import tornado.websocket
-import tornado.escape
-import tornado.gen
-import webbrowser
 
-from mesa.visualization.UserParam import UserSettableParameter, UserParam
+from mesa.visualization.UserParam import UserParam, UserSettableParameter
 
 # Suppress several pylint warnings for this file.
 # Attributes being defined outside of init is a Tornado feature.
@@ -442,7 +443,10 @@ class ModularServer(tornado.web.Application):
         if open_browser:
             webbrowser.open(url)
         tornado.autoreload.start()
-        tornado.ioloop.IOLoop.current().start()
+        try:
+            tornado.ioloop.IOLoop.current().start()
+        except KeyboardInterrupt:
+            tornado.ioloop.IOLoop.current().stop()
 
     @staticmethod
     def _is_stylesheet(filename):

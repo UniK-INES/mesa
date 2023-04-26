@@ -1,6 +1,5 @@
-from warnings import warn
 import numbers
-
+from warnings import warn
 
 NUMBER = "number"
 CHECKBOX = "checkbox"
@@ -67,7 +66,6 @@ class UserSettableParameter:
         choices=None,
         description=None,
     ):
-
         warn(
             "UserSettableParameter is deprecated in favor of UserParam objects "
             "such as Slider, Checkbox, Choice, StaticText, NumberInput. "
@@ -75,7 +73,7 @@ class UserSettableParameter:
             "UserSettableParameter will be removed in the next major release."
         )
         if choices is None:
-            choices = list()
+            choices = []
         if param_type not in self.TYPES:
             raise ValueError(f"{param_type} is not a valid Option type")
         self.param_type = param_type
@@ -92,7 +90,7 @@ class UserSettableParameter:
         valid = True
 
         if self.param_type == self.NUMBER:
-            valid = not (self.value is None)
+            valid = self.value is not None
 
         elif self.param_type == self.SLIDER:
             valid = not (
@@ -123,12 +121,11 @@ class UserSettableParameter:
                 self._value = self.min_value
             elif self._value > self.max_value:
                 self._value = self.max_value
-        elif self.param_type == self.CHOICE:
-            if self._value not in self.choices:
-                print(
-                    "Selected choice value not in available choices, selected first choice from 'choices' list"
-                )
-                self._value = self.choices[0]
+        elif (self.param_type == self.CHOICE) and self._value not in self.choices:
+            print(
+                "Selected choice value not in available choices, selected first choice from 'choices' list"
+            )
+            self._value = self.choices[0]
 
     @property
     def json(self):

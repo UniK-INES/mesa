@@ -29,9 +29,9 @@ from collections import defaultdict
 
 # mypy
 from typing import Iterator, Union
+
 from mesa.agent import Agent
 from mesa.model import Model
-
 
 # BaseScheduler has a self.time of int, while
 # StagedActivation has a self.time of float
@@ -182,7 +182,7 @@ class StagedActivation(BaseScheduler):
                                     of each step.
         """
         super().__init__(model)
-        self.stage_list = ["step"] if not stage_list else stage_list
+        self.stage_list = stage_list if stage_list else ["step"]
         self.shuffle = shuffle
         self.shuffle_between_stages = shuffle_between_stages
         self.stage_time = 1 / len(self.stage_list)

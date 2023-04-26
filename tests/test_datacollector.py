@@ -3,7 +3,7 @@ Test the DataCollector
 """
 import unittest
 
-from mesa import Model, Agent
+from mesa import Agent, Model
 from mesa.time import BaseScheduler
 
 
@@ -148,7 +148,7 @@ class TestDataCollector(unittest.TestCase):
         assert len(data_collector.tables["Final_Values"]) == 2
         assert "agent_id" in data_collector.tables["Final_Values"]
         assert "final_value" in data_collector.tables["Final_Values"]
-        for key, data in data_collector.tables["Final_Values"].items():
+        for _key, data in data_collector.tables["Final_Values"].items():
             assert len(data) == 9
 
         with self.assertRaises(Exception):

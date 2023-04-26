@@ -5,14 +5,13 @@ Core Objects: Model, and Agent.
 """
 import datetime
 
-from mesa.model import Model
-from mesa.agent import Agent
-
-import mesa.time as time
-import mesa.space as space
 import mesa.flat.visualization as visualization
+import mesa.space as space
+import mesa.time as time
+from mesa.agent import Agent
+from mesa.batchrunner import batch_run
 from mesa.datacollection import DataCollector
-from mesa.batchrunner import batch_run  # noqa
+from mesa.model import Model
 
 __all__ = [
     "Model",
@@ -25,6 +24,7 @@ __all__ = [
 ]
 
 __title__ = "mesa"
-__version__ = "1.1.1"
+__version__ = "1.2.1"
 __license__ = "Apache 2.0"
-__copyright__ = f"Copyright {datetime.date.today().year} Project Mesa Team"
+_this_year = datetime.datetime.now(tz=datetime.timezone.utc).date().year
+__copyright__ = f"Copyright {_this_year} Project Mesa Team"
