@@ -12,34 +12,25 @@ ContinuousSpace: a two-dimensional space where each agent has an arbitrary
                  position of `float`'s.
 NetworkGrid: a network where each node contains zero or more agents.
 """
-# Instruction for PyLint to suppress variable name errors, since we have a
-# good reason to use one-character variable names for x and y.
-# pylint: disable=invalid-name
 
 # Mypy; for the `|` operator purpose
 # Remove this __future__ import once the oldest supported Python is 3.10
 from __future__ import annotations
 
 import collections
+import contextlib
+import inspect
 import itertools
 import math
+import warnings
+from collections.abc import Iterable, Iterator, Sequence
 from numbers import Real
-from typing import (
-    Any,
-    Callable,
-    Iterable,
-    Iterator,
-    List,
-    Sequence,
-    Tuple,
-    TypeVar,
-    Union,
-    cast,
-    overload,
-)
+from typing import Any, Callable, TypeVar, Union, cast, overload
 from warnings import warn
 
-import networkx as nx
+with contextlib.suppress(ImportError):
+    import networkx as nx
+
 import numpy as np
 import numpy.typing as npt
 
@@ -49,15 +40,15 @@ from .agent import Agent
 # for better performance, we calculate the tuple to use in the is_integer function
 _types_integer = (int, np.integer)
 
-Coordinate = Tuple[int, int]
+Coordinate = tuple[int, int]
 # used in ContinuousSpace
-FloatCoordinate = Union[Tuple[float, float], npt.NDArray[float]]
+FloatCoordinate = Union[tuple[float, float], npt.NDArray[float]]
 NetworkCoordinate = int
 
 Position = Union[Coordinate, FloatCoordinate, NetworkCoordinate]
 
 GridContent = Union[Agent, None]
-MultiGridContent = List[Agent]
+MultiGridContent = list[Agent]
 
 F = TypeVar("F", bound=Callable[..., Any])
 
@@ -68,10 +59,9 @@ def accept_tuple_argument(wrapped_function: F) -> F:
     single-item list rather than forcing user to do it."""
 
     def wrapper(grid_instance, positions) -> Any:
-        if isinstance(positions, tuple) and len(positions) == 2:
-            return wrapped_function(grid_instance, [positions])
-        else:
-            return wrapped_function(grid_instance, positions)
+        if len(positions) == 2 and not isinstance(positions[0], tuple):
+            positions = [positions]
+        return wrapped_function(grid_instance, positions)
 
     return cast(F, wrapper)
 
@@ -79,6 +69,21 @@ def accept_tuple_argument(wrapped_function: F) -> F:
 def is_integer(x: Real) -> bool:
     # Check if x is either a CPython integer or Numpy integer.
     return isinstance(x, _types_integer)
+
+
+def warn_if_agent_has_position_already(placement_func):
+    def wrapper(self, agent, *args, **kwargs):
+        if agent.pos is not None:
+            warnings.warn(
+                f"""Agent {agent.unique_id} is being placed with
+place_agent() despite already having the position {agent.pos}. In most
+cases, you'd want to clear the current position with remove_agent()
+before placing the agent again.""",
+                stacklevel=2,
+            )
+        placement_func(self, agent, *args, **kwargs)
+
+    return wrapper
 
 
 class _Grid:
@@ -117,7 +122,12 @@ class _Grid:
         self._empties_built = False
 
         # Neighborhood Cache
-        self._neighborhood_cache: dict[Any, list[Coordinate]] = {}
+        self._neighborhood_cache: dict[Any, Sequence[Coordinate]] = {}
+
+        # Cutoff used inside self.move_to_empty. The parameters are fitted on Python
+        # 3.11 and it was verified that they are roughly the same for 3.10. Refer to
+        # the code in PR#1565 to check for their stability when a new release gets out.
+        self.cutoff_empties = 7.953 * self.num_cells**0.384
 
     @staticmethod
     def default_val() -> None:
@@ -140,19 +150,17 @@ class _Grid:
         self._empties_built = True
 
     @overload
-    def __getitem__(self, index: int | Sequence[Coordinate]) -> list[GridContent]:
-        ...
+    def __getitem__(self, index: int | Sequence[Coordinate]) -> list[GridContent]: ...
 
     @overload
     def __getitem__(
         self, index: tuple[int | slice, int | slice]
-    ) -> GridContent | list[GridContent]:
-        ...
+    ) -> GridContent | list[GridContent]: ...
 
     def __getitem__(self, index):
         """Access contents from the grid."""
 
-        if isinstance(index, int) or isinstance(index, np.integer):
+        if isinstance(index, (int, np.integer)):
             # grid[x]
             return self._grid[index]
         elif isinstance(index[0], tuple):
@@ -188,26 +196,11 @@ class _Grid:
         as if it is one list:"""
         return itertools.chain(*self._grid)
 
-    def coord_iter(self) -> Iterator[tuple[GridContent, int, int]]:
-        """An iterator that returns coordinates as well as cell contents."""
+    def coord_iter(self) -> Iterator[tuple[GridContent, Coordinate]]:
+        """An iterator that returns positions as well as cell contents."""
         for row in range(self.width):
             for col in range(self.height):
-                yield self._grid[row][col], row, col  # agent, x, y
-
-    def neighbor_iter(self, pos: Coordinate, moore: bool = True) -> Iterator[Agent]:
-        """Iterate over position neighbors.
-
-        Args:
-            pos: (x,y) coords tuple for the position to get the neighbors of.
-            moore: Boolean for whether to use Moore neighborhood (including
-                   diagonals) or Von Neumann (only up/down/left/right).
-        """
-
-        warn(
-            "`neighbor_iter` is deprecated in favor of `iter_neighbors` "
-            "and will be removed in the subsequent version."
-        )
-        return self.iter_neighbors(pos, moore)
+                yield self._grid[row][col], (row, col)  # agent, position
 
     def iter_neighborhood(
         self,
@@ -243,7 +236,7 @@ class _Grid:
         moore: bool,
         include_center: bool = False,
         radius: int = 1,
-    ) -> list[Coordinate]:
+    ) -> Sequence[Coordinate]:
         """Return a list of cells that are in the neighborhood of a
         certain point.
 
@@ -268,53 +261,58 @@ class _Grid:
         if neighborhood is not None:
             return neighborhood
 
-        # We use a list instead of a dict for the neighborhood because it would
-        # be easier to port the code to Cython or Numba (for performance
-        # purpose), with minimal changes. To better understand how the
-        # algorithm was conceived, look at
-        # https://github.com/projectmesa/mesa/pull/1476#issuecomment-1306220403
-        # and the discussion in that PR in general.
-        neighborhood = []
+        if self.out_of_bounds(pos):
+            raise Exception("The `pos` tuple passed is out of bounds.")
+
+        # we use a dict to keep insertion order
+        neighborhood = {}
 
         x, y = pos
-        if self.torus:
-            x_max_radius, y_max_radius = self.width // 2, self.height // 2
-            x_radius, y_radius = min(radius, x_max_radius), min(radius, y_max_radius)
 
-            # For each dimension, in the edge case where the radius is as big as
-            # possible and the dimension is even, we need to shrink by one the range
-            # of values, to avoid duplicates in neighborhood. For example, if
-            # the width is 4, while x, x_radius, and x_max_radius are 2, then
-            # (x + dx) has a value from 0 to 4 (inclusive), but this means that
-            # the 0 position is repeated since 0 % 4 and 4 % 4 are both 0.
-            xdim_even, ydim_even = (self.width + 1) % 2, (self.height + 1) % 2
-            kx = int(x_radius == x_max_radius and xdim_even)
-            ky = int(y_radius == y_max_radius and ydim_even)
+        # First we check if the neighborhood is inside the grid
+        if (
+            x >= radius
+            and self.width - x > radius
+            and y >= radius
+            and self.height - y > radius
+        ):
+            # If the radius is smaller than the distance from the borders, we
+            # can skip boundary checks.
+            x_range = range(x - radius, x + radius + 1)
+            y_range = range(y - radius, y + radius + 1)
 
-            for dx in range(-x_radius, x_radius + 1 - kx):
-                for dy in range(-y_radius, y_radius + 1 - ky):
+            for new_x in x_range:
+                for new_y in y_range:
+                    if not moore and abs(new_x - x) + abs(new_y - y) > radius:
+                        continue
+
+                    neighborhood[(new_x, new_y)] = True
+
+        else:
+            # If the radius is larger than the distance from the borders, we
+            # must use a slower method, that takes into account the borders
+            # and the torus property.
+            for dx in range(-radius, radius + 1):
+                for dy in range(-radius, radius + 1):
                     if not moore and abs(dx) + abs(dy) > radius:
                         continue
 
-                    nx, ny = (x + dx) % self.width, (y + dy) % self.height
-                    neighborhood.append((nx, ny))
-        else:
-            x_range = range(max(0, x - radius), min(self.width, x + radius + 1))
-            y_range = range(max(0, y - radius), min(self.height, y + radius + 1))
+                    new_x = x + dx
+                    new_y = y + dy
 
-            for nx in x_range:
-                for ny in y_range:
-                    if not moore and abs(nx - x) + abs(ny - y) > radius:
-                        continue
+                    if self.torus:
+                        new_x %= self.width
+                        new_y %= self.height
 
-                    neighborhood.append((nx, ny))
+                    if not self.out_of_bounds((new_x, new_y)):
+                        neighborhood[(new_x, new_y)] = True
 
-        if not include_center and neighborhood:
-            neighborhood.remove(pos)
+        if not include_center:
+            neighborhood.pop(pos, None)
 
-        self._neighborhood_cache[cache_key] = neighborhood
+        self._neighborhood_cache[cache_key] = tuple(neighborhood.keys())
 
-        return neighborhood
+        return tuple(neighborhood.keys())
 
     def iter_neighbors(
         self,
@@ -341,8 +339,10 @@ class _Grid:
             at most 9 if Moore, 5 if Von-Neumann
             (8 and 4 if not including the center).
         """
-        neighborhood = self.get_neighborhood(pos, moore, include_center, radius)
-        return self.iter_cell_list_contents(neighborhood)
+        default_val = self.default_val()
+        for x, y in self.get_neighborhood(pos, moore, include_center, radius):
+            if (cell := self._grid[x][y]) != default_val:
+                yield cell
 
     def get_neighbors(
         self,
@@ -400,10 +400,10 @@ class _Grid:
             An iterator of the agents contained in the cells identified in `cell_list`.
         """
         # iter_cell_list_contents returns only non-empty contents.
-        return (
-            self._grid[x][y]
-            for x, y in itertools.filterfalse(self.is_cell_empty, cell_list)
-        )
+        default_val = self.default_val()
+        for x, y in cell_list:
+            if (cell := self._grid[x][y]) != default_val:
+                yield cell
 
     @accept_tuple_argument
     def get_cell_list_contents(self, cell_list: Iterable[Coordinate]) -> list[Agent]:
@@ -418,11 +418,9 @@ class _Grid:
         """
         return list(self.iter_cell_list_contents(cell_list))
 
-    def place_agent(self, agent: Agent, pos: Coordinate) -> None:
-        ...
+    def place_agent(self, agent: Agent, pos: Coordinate) -> None: ...
 
-    def remove_agent(self, agent: Agent) -> None:
-        ...
+    def remove_agent(self, agent: Agent) -> None: ...
 
     def move_agent(self, agent: Agent, pos: Coordinate) -> None:
         """Move an agent from its current position to a new position.
@@ -435,6 +433,70 @@ class _Grid:
         pos = self.torus_adj(pos)
         self.remove_agent(agent)
         self.place_agent(agent, pos)
+
+    def move_agent_to_one_of(
+        self,
+        agent: Agent,
+        pos: list[Coordinate],
+        selection: str = "random",
+        handle_empty: str | None = None,
+    ) -> None:
+        """
+        Move an agent to one of the given positions.
+
+        Args:
+            agent: Agent object to move. Assumed to have its current location stored in a 'pos' tuple.
+            pos: List of possible positions.
+            selection: String, either "random" (default) or "closest". If "closest" is selected and multiple
+                       cells are the same distance, one is chosen randomly.
+            handle_empty: String, either "warning", "error" or None (default). If "warning" or "error" is selected
+                          and no positions are given (an empty list), a warning or error is raised respectively.
+        """
+        # Only move agent if there are positions given (non-empty list)
+        if pos:
+            if selection == "random":
+                chosen_pos = agent.random.choice(pos)
+            elif selection == "closest":
+                current_pos = agent.pos
+                # Find the closest position without sorting all positions
+                closest_pos = None
+                min_distance = float("inf")
+                agent.random.shuffle(pos)
+                for p in pos:
+                    distance = self._distance_squared(p, current_pos)
+                    if distance < min_distance:
+                        min_distance = distance
+                        closest_pos = p
+                chosen_pos = closest_pos
+            else:
+                raise ValueError(
+                    f"Invalid selection method {selection}. Choose 'random' or 'closest'."
+                )
+            #  Move agent to chosen position
+            self.move_agent(agent, chosen_pos)
+
+        # If no positions are given, throw warning/error if selected
+        elif handle_empty == "warning":
+            warn(
+                f"No positions given, could not move agent {agent.unique_id}.",
+                RuntimeWarning,
+                stacklevel=2,
+            )
+        elif handle_empty == "error":
+            raise ValueError(
+                f"No positions given, could not move agent {agent.unique_id}."
+            )
+
+    def _distance_squared(self, pos1: Coordinate, pos2: Coordinate) -> float:
+        """
+        Calculate the squared Euclidean distance between two points for performance.
+        """
+        # Use squared Euclidean distance to avoid sqrt operation
+        dx, dy = abs(pos1[0] - pos2[0]), abs(pos1[1] - pos2[1])
+        if self.torus:
+            dx = min(dx, self.width - dx)
+            dy = min(dy, self.height - dy)
+        return dx**2 + dy**2
 
     def swap_pos(self, agent_a: Agent, agent_b: Agent) -> None:
         """Swap agents positions"""
@@ -461,28 +523,18 @@ class _Grid:
         x, y = pos
         return self._grid[x][y] == self.default_val()
 
-    def move_to_empty(
-        self, agent: Agent, cutoff: float = 0.998, num_agents: int | None = None
-    ) -> None:
+    def move_to_empty(self, agent: Agent) -> None:
         """Moves agent to a random empty cell, vacating agent's old cell."""
-        if num_agents is not None:
-            warn(
-                (
-                    "`num_agents` is being deprecated since it's no longer used "
-                    "inside `move_to_empty`. It shouldn't be passed as a parameter."
-                ),
-                DeprecationWarning,
-            )
         num_empty_cells = len(self.empties)
         if num_empty_cells == 0:
             raise Exception("ERROR: No empty cells")
 
         # This method is based on Agents.jl's random_empty() implementation. See
         # https://github.com/JuliaDynamics/Agents.jl/pull/541. For the discussion, see
-        # https://github.com/projectmesa/mesa/issues/1052. The default cutoff value
-        # provided is the break-even comparison with the time taken in the else
-        # branching point.
-        if 1 - num_empty_cells / self.num_cells < cutoff:
+        # https://github.com/projectmesa/mesa/issues/1052 and
+        # https://github.com/projectmesa/mesa/pull/1565. The cutoff value provided
+        # is the break-even comparison with the time taken in the else branching point.
+        if num_empty_cells > self.cutoff_empties:
             while True:
                 new_pos = (
                     agent.random.randrange(self.width),
@@ -495,79 +547,448 @@ class _Grid:
         self.remove_agent(agent)
         self.place_agent(agent, new_pos)
 
-    def find_empty(self) -> Coordinate | None:
-        """Pick a random empty cell."""
-        import random
-
-        warn(
-            (
-                "`find_empty` is being phased out since it uses the global "
-                "`random` instead of the model-level random-number generator. "
-                "Consider replacing it with having a model or agent object "
-                "explicitly pick one of the grid's list of empty cells."
-            ),
-            DeprecationWarning,
-        )
-
-        if self.exists_empty_cells():
-            pos = random.choice(sorted(self.empties))
-            return pos
-        else:
-            return None
-
     def exists_empty_cells(self) -> bool:
         """Return True if any cells empty else False."""
         return len(self.empties) > 0
 
 
-class SingleGrid(_Grid):
+def is_single_argument_function(function):
+    """Check if a function is a single argument function."""
+    return (
+        inspect.isfunction(function)
+        and len(inspect.signature(function).parameters) == 1
+    )
+
+
+def ufunc_requires_additional_input(ufunc):
+    # NumPy ufuncs have a 'nargs' attribute indicating the number of input arguments
+    # For binary ufuncs (like np.add), nargs is 2
+    return ufunc.nargs > 1
+
+
+class PropertyLayer:
+    """
+    A class representing a layer of properties in a two-dimensional grid. Each cell in the grid
+    can store a value of a specified data type.
+
+    Attributes:
+        name (str): The name of the property layer.
+        width (int): The width of the grid (number of columns).
+        height (int): The height of the grid (number of rows).
+        data (numpy.ndarray): A NumPy array representing the grid data.
+
+    Methods:
+        set_cell(position, value): Sets the value of a single cell.
+        set_cells(value, condition=None): Sets the values of multiple cells, optionally based on a condition.
+        modify_cell(position, operation, value): Modifies the value of a single cell using an operation.
+        modify_cells(operation, value, condition_function): Modifies the values of multiple cells using an operation.
+        select_cells(condition, return_list): Selects cells that meet a specified condition.
+        aggregate_property(operation): Performs an aggregate operation over all cells.
+    """
+
+    agentset_experimental_warning_given = False
+
+    def __init__(
+        self, name: str, width: int, height: int, default_value, dtype=np.float64
+    ):
+        """
+        Initializes a new PropertyLayer instance.
+
+        Args:
+            name (str): The name of the property layer.
+            width (int): The width of the grid (number of columns). Must be a positive integer.
+            height (int): The height of the grid (number of rows). Must be a positive integer.
+            default_value: The default value to initialize each cell in the grid. Should ideally
+                           be of the same type as specified by the dtype parameter.
+            dtype (data-type, optional): The desired data-type for the grid's elements. Default is np.float64.
+
+        Raises:
+            ValueError: If width or height is not a positive integer.
+
+        Notes:
+            A UserWarning is raised if the default_value is not of a type compatible with dtype.
+            The dtype parameter can accept both Python data types (like bool, int or float) and NumPy data types
+            (like np.int64 or np.float64). Using NumPy data types is recommended (except for bool) for better control
+            over the precision and efficiency of data storage and computations, especially in cases of large data
+            volumes or specialized numerical operations.
+        """
+        self.name = name
+        self.width = width
+        self.height = height
+
+        # Check that width and height are positive integers
+        if (not isinstance(width, int) or width < 1) or (
+            not isinstance(height, int) or height < 1
+        ):
+            raise ValueError(
+                f"Width and height must be positive integers, got {width} and {height}."
+            )
+        # Check if the dtype is suitable for the data
+        if not isinstance(default_value, dtype):
+            warn(
+                f"Default value {default_value} ({type(default_value).__name__}) might not be best suitable with dtype={dtype.__name__}.",
+                UserWarning,
+                stacklevel=2,
+            )
+
+        self.data = np.full((width, height), default_value, dtype=dtype)
+
+        if not self.__class__.agentset_experimental_warning_given:
+            warnings.warn(
+                "The new PropertyLayer and _PropertyGrid classes experimental. It may be changed or removed in any and all future releases, including patch releases.\n"
+                "We would love to hear what you think about this new feature. If you have any thoughts, share them with us here: https://github.com/projectmesa/mesa/discussions/1932",
+                FutureWarning,
+                stacklevel=2,
+            )
+            self.__class__.agentset_experimental_warning_given = True
+
+    def set_cell(self, position: Coordinate, value):
+        """
+        Update a single cell's value in-place.
+        """
+        self.data[position] = value
+
+    def set_cells(self, value, condition=None):
+        """
+        Perform a batch update either on the entire grid or conditionally, in-place.
+
+        Args:
+            value: The value to be used for the update.
+            condition: (Optional) A callable (like a lambda function or a NumPy ufunc)
+                       that returns a boolean array when applied to the data.
+        """
+        if condition is None:
+            np.copyto(self.data, value)  # In-place update
+        else:
+            if isinstance(condition, np.ufunc):
+                # Directly apply NumPy ufunc
+                condition_result = condition(self.data)
+            else:
+                # Vectorize non-ufunc conditions
+                vectorized_condition = np.vectorize(condition)
+                condition_result = vectorized_condition(self.data)
+
+            if (
+                not isinstance(condition_result, np.ndarray)
+                or condition_result.shape != self.data.shape
+            ):
+                raise ValueError(
+                    "Result of condition must be a NumPy array with the same shape as the grid."
+                )
+
+            np.copyto(self.data, value, where=condition_result)
+
+    def modify_cell(self, position: Coordinate, operation, value=None):
+        """
+        Modify a single cell using an operation, which can be a lambda function or a NumPy ufunc.
+        If a NumPy ufunc is used, an additional value should be provided.
+
+        Args:
+            position: The grid coordinates of the cell to modify.
+            operation: A function to apply. Can be a lambda function or a NumPy ufunc.
+            value: The value to be used if the operation is a NumPy ufunc. Ignored for lambda functions.
+        """
+        current_value = self.data[position]
+
+        # Determine if the operation is a lambda function or a NumPy ufunc
+        if is_single_argument_function(operation):
+            # Lambda function case
+            self.data[position] = operation(current_value)
+        elif value is not None:
+            # NumPy ufunc case
+            self.data[position] = operation(current_value, value)
+        else:
+            raise ValueError("Invalid operation or missing value for NumPy ufunc.")
+
+    def modify_cells(self, operation, value=None, condition_function=None):
+        """
+        Modify cells using an operation, which can be a lambda function or a NumPy ufunc.
+        If a NumPy ufunc is used, an additional value should be provided.
+
+        Args:
+            operation: A function to apply. Can be a lambda function or a NumPy ufunc.
+            value: The value to be used if the operation is a NumPy ufunc. Ignored for lambda functions.
+            condition_function: (Optional) A callable that returns a boolean array when applied to the data.
+        """
+        condition_array = np.ones_like(
+            self.data, dtype=bool
+        )  # Default condition (all cells)
+        if condition_function is not None:
+            if isinstance(condition_function, np.ufunc):
+                condition_array = condition_function(self.data)
+            else:
+                vectorized_condition = np.vectorize(condition_function)
+                condition_array = vectorized_condition(self.data)
+
+        # Check if the operation is a lambda function or a NumPy ufunc
+        if isinstance(operation, np.ufunc):
+            if ufunc_requires_additional_input(operation):
+                if value is None:
+                    raise ValueError("This ufunc requires an additional input value.")
+                modified_data = operation(self.data, value)
+            else:
+                modified_data = operation(self.data)
+        else:
+            # Vectorize non-ufunc operations
+            vectorized_operation = np.vectorize(operation)
+            modified_data = vectorized_operation(self.data)
+
+        self.data = np.where(condition_array, modified_data, self.data)
+
+    def select_cells(self, condition, return_list=True):
+        """
+        Find cells that meet a specified condition using NumPy's boolean indexing, in-place.
+
+        Args:
+            condition: A callable that returns a boolean array when applied to the data.
+            return_list: (Optional) If True, return a list of (x, y) tuples. Otherwise, return a boolean array.
+
+        Returns:
+            A list of (x, y) tuples or a boolean array.
+        """
+        condition_array = condition(self.data)
+        if return_list:
+            return list(zip(*np.where(condition_array)))
+        else:
+            return condition_array
+
+    def aggregate_property(self, operation):
+        """Perform an aggregate operation (e.g., sum, mean) on a property across all cells.
+
+        Args:
+            operation: A function to apply. Can be a lambda function or a NumPy ufunc.
+        """
+        return operation(self.data)
+
+
+class _PropertyGrid(_Grid):
+    """
+    A private subclass of _Grid that supports the addition of property layers, enabling
+    the representation and manipulation of additional data layers on the grid. This class is
+    intended for internal use within the Mesa framework and is currently utilized by SingleGrid
+    and MultiGrid classes to provide enhanced grid functionality.
+
+    The `_PropertyGrid` extends the capabilities of a basic grid by allowing each cell
+    to have multiple properties, each represented by a separate PropertyLayer.
+    These properties can be used to model complex environments where each cell
+    has multiple attributes or states.
+
+    Attributes:
+        properties (dict): A dictionary mapping property layer names to PropertyLayer instances.
+        empty_mask (np.ndarray): A boolean array indicating empty cells on the grid.
+
+    Methods:
+        add_property_layer(property_layer): Adds a new property layer to the grid.
+        remove_property_layer(property_name): Removes a property layer from the grid by its name.
+        get_neighborhood_mask(pos, moore, include_center, radius): Generates a boolean mask of the neighborhood.
+        select_cells(conditions, extreme_values, masks, only_empty, return_list): Selects cells based on multiple conditions,
+            extreme values, masks, with an option to select only empty cells, returning either a list of coordinates or a mask.
+
+    Mask Usage:
+        Several methods in this class accept a mask as an input, which is a NumPy ndarray of boolean values. This mask
+        specifies the cells to be considered (True) or ignored (False) in operations. Users can create custom masks,
+        including neighborhood masks, to apply specific conditions or constraints. Additionally, methods that deal with
+        cell selection or agent movement can return either a list of cell coordinates or a mask, based on the 'return_list'
+        parameter. This flexibility allows for more nuanced control and customization of grid operations, catering to a wide
+        range of modeling requirements and scenarios.
+
+    Note:
+        This class is not intended for direct use in user models but is currently used by the SingleGrid and MultiGrid.
+    """
+
+    def __init__(
+        self,
+        width: int,
+        height: int,
+        torus: bool,
+        property_layers: None | PropertyLayer | list[PropertyLayer] = None,
+    ):
+        """
+        Initializes a new _PropertyGrid instance with specified dimensions and optional property layers.
+
+        Args:
+            width (int): The width of the grid (number of columns).
+            height (int): The height of the grid (number of rows).
+            torus (bool): A boolean indicating if the grid should behave like a torus.
+            property_layers (None | PropertyLayer | list[PropertyLayer], optional): A single PropertyLayer instance,
+                a list of PropertyLayer instances, or None to initialize without any property layers.
+
+        Raises:
+            ValueError: If a property layer's dimensions do not match the grid dimensions.
+        """
+        super().__init__(width, height, torus)
+        self.properties = {}
+
+        # Initialize an empty mask as a boolean NumPy array
+        self._empty_mask = np.ones((self.width, self.height), dtype=bool)
+
+        # Handle both single PropertyLayer instance and list of PropertyLayer instances
+        if property_layers:
+            # If a single PropertyLayer is passed, convert it to a list
+            if isinstance(property_layers, PropertyLayer):
+                property_layers = [property_layers]
+
+            for layer in property_layers:
+                self.add_property_layer(layer)
+
+    @property
+    def empty_mask(self) -> np.ndarray:
+        """
+        Returns a boolean mask indicating empty cells on the grid.
+        """
+        return self._empty_mask
+
+    # Add and remove properties to the grid
+    def add_property_layer(self, property_layer: PropertyLayer):
+        """
+        Adds a new property layer to the grid.
+
+        Args:
+            property_layer (PropertyLayer): The PropertyLayer instance to be added to the grid.
+
+        Raises:
+            ValueError: If a property layer with the same name already exists in the grid.
+            ValueError: If the dimensions of the property layer do not match the grid's dimensions.
+        """
+        if property_layer.name in self.properties:
+            raise ValueError(f"Property layer {property_layer.name} already exists.")
+        if property_layer.width != self.width or property_layer.height != self.height:
+            raise ValueError(
+                f"Property layer dimensions {property_layer.width}x{property_layer.height} do not match grid dimensions {self.width}x{self.height}."
+            )
+        self.properties[property_layer.name] = property_layer
+
+    def remove_property_layer(self, property_name: str):
+        """
+        Removes a property layer from the grid by its name.
+
+        Args:
+            property_name (str): The name of the property layer to be removed.
+
+        Raises:
+            ValueError: If a property layer with the given name does not exist in the grid.
+        """
+        if property_name not in self.properties:
+            raise ValueError(f"Property layer {property_name} does not exist.")
+        del self.properties[property_name]
+
+    def get_neighborhood_mask(
+        self, pos: Coordinate, moore: bool, include_center: bool, radius: int
+    ) -> np.ndarray:
+        """
+        Generate a boolean mask representing the neighborhood.
+        Helper method for select_cells_multi_properties() and move_agent_to_random_cell()
+
+        Args:
+            pos (Coordinate): Center of the neighborhood.
+            moore (bool): True for Moore neighborhood, False for Von Neumann.
+            include_center (bool): Include the central cell in the neighborhood.
+            radius (int): The radius of the neighborhood.
+
+        Returns:
+            np.ndarray: A boolean mask representing the neighborhood.
+        """
+        neighborhood = self.get_neighborhood(pos, moore, include_center, radius)
+        mask = np.zeros((self.width, self.height), dtype=bool)
+
+        # Convert the neighborhood list to a NumPy array and use advanced indexing
+        coords = np.array(neighborhood)
+        mask[coords[:, 0], coords[:, 1]] = True
+        return mask
+
+    def select_cells(
+        self,
+        conditions: dict | None = None,
+        extreme_values: dict | None = None,
+        masks: np.ndarray | list[np.ndarray] = None,
+        only_empty: bool = False,
+        return_list: bool = True,
+    ) -> list[Coordinate] | np.ndarray:
+        """
+        Select cells based on property conditions, extreme values, and/or masks, with an option to only select empty cells.
+
+        Args:
+            conditions (dict): A dictionary where keys are property names and values are callables that return a boolean when applied.
+            extreme_values (dict): A dictionary where keys are property names and values are either 'highest' or 'lowest'.
+            masks (np.ndarray | list[np.ndarray], optional): A mask or list of masks to restrict the selection.
+            only_empty (bool, optional): If True, only select cells that are empty. Default is False.
+            return_list (bool, optional): If True, return a list of coordinates, otherwise return a mask.
+
+        Returns:
+            Union[list[Coordinate], np.ndarray]: Coordinates where conditions are satisfied or the combined mask.
+        """
+        # Initialize the combined mask
+        combined_mask = np.ones((self.width, self.height), dtype=bool)
+
+        # Apply the masks
+        if masks is not None:
+            if isinstance(masks, list):
+                for mask in masks:
+                    combined_mask = np.logical_and(combined_mask, mask)
+            else:
+                combined_mask = np.logical_and(combined_mask, masks)
+
+        # Apply the empty mask if only_empty is True
+        if only_empty:
+            combined_mask = np.logical_and(combined_mask, self.empty_mask)
+
+        # Apply conditions
+        if conditions:
+            for prop_name, condition in conditions.items():
+                prop_layer = self.properties[prop_name].data
+                prop_mask = condition(prop_layer)
+                combined_mask = np.logical_and(combined_mask, prop_mask)
+
+        # Apply extreme values
+        if extreme_values:
+            for property_name, mode in extreme_values.items():
+                prop_values = self.properties[property_name].data
+
+                # Create a masked array using the combined_mask
+                masked_values = np.ma.masked_array(prop_values, mask=~combined_mask)
+
+                if mode == "highest":
+                    target_value = masked_values.max()
+                elif mode == "lowest":
+                    target_value = masked_values.min()
+                else:
+                    raise ValueError(
+                        f"Invalid mode {mode}. Choose from 'highest' or 'lowest'."
+                    )
+
+                extreme_value_mask = prop_values == target_value
+                combined_mask = np.logical_and(combined_mask, extreme_value_mask)
+
+        # Generate output
+        if return_list:
+            selected_cells = list(zip(*np.where(combined_mask)))
+            return selected_cells
+        else:
+            return combined_mask
+
+
+class SingleGrid(_PropertyGrid):
     """Rectangular grid where each cell contains exactly at most one agent.
 
     Grid cells are indexed by [x, y], where [0, 0] is assumed to be the
     bottom-left and [width-1, height-1] is the top-right. If a grid is
     toroidal, the top and bottom, and left and right, edges wrap to each other.
 
+    This class provides a property `empties` that returns a set of coordinates
+    for all empty cells in the grid. It is automatically updated whenever
+    agents are added or removed from the grid. The `empties` property should be
+    used for efficient access to current empty cells rather than manually
+    iterating over the grid to check for emptiness.
+
     Properties:
         width, height: The grid's width and height.
         torus: Boolean which determines whether to treat the grid as a torus.
+        empties: Returns a set of (x, y) tuples for all empty cells. This set is
+                 maintained internally and provides a performant way to query
+                 the grid for empty spaces.
     """
 
-    def position_agent(
-        self, agent: Agent, x: int | str = "random", y: int | str = "random"
-    ) -> None:
-        """Position an agent on the grid.
-        This is used when first placing agents! Setting either x or y to "random"
-        gives the same behavior as 'move_to_empty()' to get a random position.
-        If x or y are positive, they are used.
-        Use 'swap_pos()' to swap agents positions.
-        """
-        warn(
-            (
-                "`position_agent` is being deprecated; use instead "
-                "`place_agent` to place an agent at a specified "
-                "location or `move_to_empty` to place an agent "
-                "at a random empty cell."
-            ),
-            DeprecationWarning,
-        )
-
-        if not (isinstance(x, int) or x == "random"):
-            raise Exception(
-                "x must be an integer or a string 'random'."
-                f" Actual type: {type(x)}. Actual value: {x}."
-            )
-        if not (isinstance(y, int) or y == "random"):
-            raise Exception(
-                "y must be an integer or a string 'random'."
-                f" Actual type: {type(y)}. Actual value: {y}."
-            )
-
-        if x == "random" or y == "random":
-            self.move_to_empty(agent)
-        else:
-            coords = (x, y)
-            self.place_agent(agent, coords)
-
+    @warn_if_agent_has_position_already
     def place_agent(self, agent: Agent, pos: Coordinate) -> None:
         """Place the agent at the specified location, and set its pos variable."""
         if self.is_cell_empty(pos):
@@ -575,6 +996,7 @@ class SingleGrid(_Grid):
             self._grid[x][y] = agent
             if self._empties_built:
                 self._empties.discard(pos)
+            self._empty_mask[pos] = False
             agent.pos = pos
         else:
             raise Exception("Cell not empty")
@@ -587,19 +1009,25 @@ class SingleGrid(_Grid):
         self._grid[x][y] = self.default_val()
         if self._empties_built:
             self._empties.add(pos)
+        self._empty_mask[agent.pos] = True
         agent.pos = None
 
 
-class MultiGrid(_Grid):
+class MultiGrid(_PropertyGrid):
     """Rectangular grid where each cell can contain more than one agent.
 
     Grid cells are indexed by [x, y], where [0, 0] is assumed to be at
     bottom-left and [width-1, height-1] is the top-right. If a grid is
     toroidal, the top and bottom, and left and right, edges wrap to each other.
 
+    This class maintains an `empties` property, which is a set of coordinates
+    for all cells that currently contain no agents. This property is updated
+    automatically as agents are added to or removed from the grid.
+
     Properties:
         width, height: The grid's width and height.
         torus: Boolean which determines whether to treat the grid as a torus.
+        empties: Returns a set of (x, y) tuples for all empty cells.
     """
 
     grid: list[list[MultiGridContent]]
@@ -609,6 +1037,7 @@ class MultiGrid(_Grid):
         """Default value for new cell elements."""
         return []
 
+    @warn_if_agent_has_position_already
     def place_agent(self, agent: Agent, pos: Coordinate) -> None:
         """Place the agent at the specified location, and set its pos variable."""
         x, y = pos
@@ -617,6 +1046,7 @@ class MultiGrid(_Grid):
             agent.pos = pos
             if self._empties_built:
                 self._empties.discard(pos)
+                self._empty_mask[agent.pos] = True
 
     def remove_agent(self, agent: Agent) -> None:
         """Remove the agent from the given location and set its pos attribute to None."""
@@ -625,7 +1055,19 @@ class MultiGrid(_Grid):
         self._grid[x][y].remove(agent)
         if self._empties_built and self.is_cell_empty(pos):
             self._empties.add(pos)
+            self._empty_mask[agent.pos] = False
         agent.pos = None
+
+    def iter_neighbors(
+        self,
+        pos: Coordinate,
+        moore: bool,
+        include_center: bool = False,
+        radius: int = 1,
+    ) -> Iterator[Agent]:
+        return itertools.chain.from_iterable(
+            super().iter_neighbors(pos, moore, include_center, radius)
+        )
 
     @accept_tuple_argument
     def iter_cell_list_contents(
@@ -640,14 +1082,14 @@ class MultiGrid(_Grid):
         Returns:
             An iterator of the agents contained in the cells identified in `cell_list`.
         """
+        default_val = self.default_val()
         return itertools.chain.from_iterable(
-            self._grid[x][y]
-            for x, y in itertools.filterfalse(self.is_cell_empty, cell_list)
+            cell for x, y in cell_list if (cell := self._grid[x][y]) != default_val
         )
 
 
-class HexGrid(SingleGrid):
-    """Hexagonal Grid: Extends SingleGrid to handle hexagonal neighbors.
+class _HexGrid:
+    """Hexagonal Grid which handles hexagonal neighbors.
 
     Functions according to odd-q rules.
     See http://www.redblobgames.com/grids/hexagons/#coordinates for more.
@@ -750,23 +1192,10 @@ class HexGrid(SingleGrid):
         else:
             coordinates.discard(pos)
 
-        neighborhood = sorted(coordinates)
+        neighborhood = tuple(sorted(coordinates))
         self._neighborhood_cache[cache_key] = neighborhood
 
         return neighborhood
-
-    def neighbor_iter(self, pos: Coordinate) -> Iterator[Agent]:
-        """Iterate over position neighbors.
-
-        Args:
-            pos: (x,y) coords tuple for the position to get the neighbors of.
-        """
-
-        warn(
-            "`neighbor_iter` is deprecated in favor of `iter_neighbors` "
-            "and will be removed in the subsequent version."
-        )
-        return self.iter_neighbors(pos)
 
     def iter_neighborhood(
         self, pos: Coordinate, include_center: bool = False, radius: int = 1
@@ -821,6 +1250,66 @@ class HexGrid(SingleGrid):
         return list(self.iter_neighbors(pos, include_center, radius))
 
 
+class HexSingleGrid(_HexGrid, SingleGrid):
+    """Hexagonal SingleGrid: a SingleGrid where neighbors are computed
+    according to a hexagonal tiling of the grid.
+
+    Functions according to odd-q rules.
+    See http://www.redblobgames.com/grids/hexagons/#coordinates for more.
+
+    This class also maintains an `empties` property, similar to SingleGrid,
+    which provides a set of coordinates for all empty hexagonal cells.
+
+    Properties:
+        width, height: The grid's width and height.
+        torus: Boolean which determines whether to treat the grid as a torus.
+        empties: Returns a set of hexagonal coordinates for all empty cells.
+    """
+
+
+class HexMultiGrid(_HexGrid, MultiGrid):
+    """Hexagonal MultiGrid: a MultiGrid where neighbors are computed
+    according to a hexagonal tiling of the grid.
+
+    Functions according to odd-q rules.
+    See http://www.redblobgames.com/grids/hexagons/#coordinates for more.
+
+    Similar to the standard MultiGrid, this class maintains an `empties` property,
+    which is a set of coordinates for all hexagonal cells that currently contain
+    no agents. This property is updated automatically as agents are added to or
+    removed from the grid.
+
+    Properties:
+        width, height: The grid's width and height.
+        torus: Boolean which determines whether to treat the grid as a torus.
+        empties: Returns a set of hexagonal coordinates for all empty cells.
+    """
+
+
+class HexGrid(HexSingleGrid):
+    """Hexagonal Grid: a Grid where neighbors are computed
+    according to a hexagonal tiling of the grid.
+
+    Functions according to odd-q rules.
+    See http://www.redblobgames.com/grids/hexagons/#coordinates for more.
+
+    Properties:
+        width, height: The grid's width and height.
+        torus: Boolean which determines whether to treat the grid as a torus.
+    """
+
+    def __init__(self, width: int, height: int, torus: bool) -> None:
+        super().__init__(width, height, torus)
+        warn(
+            (
+                "HexGrid is being deprecated; use instead HexSingleGrid or HexMultiGrid "
+                "depending on your use case."
+            ),
+            DeprecationWarning,
+            stacklevel=2,
+        )
+
+
 class ContinuousSpace:
     """Continuous space where each agent can have an arbitrary position.
 
@@ -830,6 +1319,9 @@ class ContinuousSpace:
     This class uses a numpy array internally to store agents in order to speed
     up neighborhood lookups. This array is calculated on the first neighborhood
     lookup, and is updated if agents are added or removed.
+
+    The concept of 'empty cells' is not directly applicable in continuous space,
+    as positions are not discretized.
     """
 
     def __init__(
@@ -877,6 +1369,7 @@ class ContinuousSpace:
         self._agent_points = None
         self._index_to_agent = {}
 
+    @warn_if_agent_has_position_already
     def place_agent(self, agent: Agent, pos: FloatCoordinate) -> None:
         """Place a new agent in the space.
 
@@ -957,11 +1450,21 @@ class ContinuousSpace:
         """
         one = np.array(pos_1)
         two = np.array(pos_2)
-        if self.torus:
-            one = (one - self.center) % self.size
-            two = (two - self.center) % self.size
         heading = two - one
-        if isinstance(pos_1, tuple):
+        if self.torus:
+            inverse_heading = heading - np.sign(heading) * self.size
+
+            def get_min_abs(x, y):
+                return x if abs(x) < abs(y) else y
+
+            # Choose the smaller heading based on their absolute value for
+            # each dimension independently.
+            heading = tuple(
+                get_min_abs(heading[i], inverse_heading[i]) for i in range(2)
+            )
+        if isinstance(pos_1, np.ndarray):
+            heading = np.asarray(heading)
+        else:
             heading = tuple(heading)
         return heading
 
@@ -1027,27 +1530,35 @@ class NetworkGrid:
         """Default value for a new node."""
         return []
 
+    @warn_if_agent_has_position_already
     def place_agent(self, agent: Agent, node_id: int) -> None:
         """Place an agent in a node."""
         self.G.nodes[node_id]["agent"].append(agent)
         agent.pos = node_id
 
-    def get_neighbors(
+    def get_neighborhood(
         self, node_id: int, include_center: bool = False, radius: int = 1
     ) -> list[int]:
         """Get all adjacent nodes within a certain radius"""
         if radius == 1:
-            neighbors = list(self.G.neighbors(node_id))
+            neighborhood = list(self.G.neighbors(node_id))
             if include_center:
-                neighbors.append(node_id)
+                neighborhood.append(node_id)
         else:
             neighbors_with_distance = nx.single_source_shortest_path_length(
                 self.G, node_id, radius
             )
             if not include_center:
                 del neighbors_with_distance[node_id]
-            neighbors = sorted(neighbors_with_distance.keys())
-        return neighbors
+            neighborhood = sorted(neighbors_with_distance.keys())
+        return neighborhood
+
+    def get_neighbors(
+        self, node_id: int, include_center: bool = False, radius: int = 1
+    ) -> list[Agent]:
+        """Get all agents in adjacent nodes (within a certain radius)."""
+        neighborhood = self.get_neighborhood(node_id, include_center, radius)
+        return self.get_cell_list_contents(neighborhood)
 
     def move_agent(self, agent: Agent, node_id: int) -> None:
         """Move an agent from its current node to a new node."""

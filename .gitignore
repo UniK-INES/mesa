@@ -1,3 +1,6 @@
+# Benchmarking
+benchmarks/**/*.pickle
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -66,6 +69,7 @@ target/
 
 # PyCharm environment files
 .idea/
+*.pclprof
 
 # VSCode environment files
 .vscode/
@@ -86,7 +90,10 @@ pythonenv*/
 mesa/visualization/templates/external/
 mesa/visualization/templates/js/external/
 
+<<<<<<< HEAD
 
 /setup.py
 /.pydevproject
 /.project
+=======
+>>>>>>> refs/remotes/upstream/main

@@ -1,11 +1,12 @@
 """
 Test the Grid objects.
 """
+
 import random
 import unittest
 from unittest.mock import Mock, patch
 
-from mesa.space import HexGrid, MultiGrid, SingleGrid
+from mesa.space import HexSingleGrid, MultiGrid, SingleGrid
 
 # Initial agent positions for testing
 #
@@ -24,10 +25,10 @@ class MockAgent:
     Minimalistic agent for testing purposes.
     """
 
-    def __init__(self, unique_id, pos):
+    def __init__(self, unique_id):
         self.random = random.Random(0)
         self.unique_id = unique_id
-        self.pos = pos
+        self.pos = None
 
 
 class TestSingleGrid(unittest.TestCase):
@@ -53,7 +54,7 @@ class TestSingleGrid(unittest.TestCase):
                     continue
                 counter += 1
                 # Create and place the mock agent
-                a = MockAgent(counter, None)
+                a = MockAgent(counter)
                 self.agents.append(a)
                 self.grid.place_agent(a, (x, y))
 
@@ -119,11 +120,8 @@ class TestSingleGrid(unittest.TestCase):
         neighborhood = self.grid.get_neighborhood((0, 0), moore=False)
         assert len(neighborhood) == 2
 
-        neighbors = self.grid.get_neighbors((4, 1), moore=False)
-        assert len(neighbors) == 0
-
-        neighbors = self.grid.get_neighbors((4, 1), moore=True)
-        assert len(neighbors) == 0
+        with self.assertRaises(Exception):
+            neighbors = self.grid.get_neighbors((4, 1), moore=False)
 
         neighbors = self.grid.get_neighbors((1, 1), moore=False, include_center=True)
         assert len(neighbors) == 3
@@ -137,15 +135,13 @@ class TestSingleGrid(unittest.TestCase):
         # no agent in first space
         first = next(ci)
         assert first[0] is None
-        assert first[1] == 0
-        assert first[2] == 0
+        assert first[1] == (0, 0)
 
         # first agent in the second space
         second = next(ci)
         assert second[0].unique_id == 1
         assert second[0].pos == (0, 1)
-        assert second[1] == 0
-        assert second[2] == 1
+        assert second[1] == (0, 1)
 
     def test_agent_move(self):
         # get the agent at [0, 1]
@@ -153,7 +149,7 @@ class TestSingleGrid(unittest.TestCase):
         self.grid.move_agent(agent, (1, 0))
         assert agent.pos == (1, 0)
         # move it off the torus and check for the exception
-        if not self.torus:
+        if not self.grid.torus:
             with self.assertRaises(Exception):
                 self.grid.move_agent(agent, [-1, 1])
             with self.assertRaises(Exception):
@@ -263,29 +259,10 @@ class TestSingleGridEnforcement(unittest.TestCase):
                     continue
                 counter += 1
                 # Create and place the mock agent
-                a = MockAgent(counter, None)
+                a = MockAgent(counter)
                 self.agents.append(a)
                 self.grid.place_agent(a, (x, y))
         self.num_agents = len(self.agents)
-
-    @patch.object(MockAgent, "model", create=True)
-    def test_position_agent(self, mock_model):
-        a = MockAgent(100, None)
-        with self.assertRaises(Exception) as exc_info:
-            self.grid.position_agent(a, (1, 1))
-        expected = (
-            "x must be an integer or a string 'random'."
-            " Actual type: <class 'tuple'>. Actual value: (1, 1)."
-        )
-        assert str(exc_info.exception) == expected
-        with self.assertRaises(Exception) as exc_info:
-            self.grid.position_agent(a, "(1, 1)")
-        expected = (
-            "x must be an integer or a string 'random'."
-            " Actual type: <class 'str'>. Actual value: (1, 1)."
-        )
-        assert str(exc_info.exception) == expected
-        self.grid.position_agent(a, "random")
 
     @patch.object(MockAgent, "model", create=True)
     def test_enforcement(self, mock_model):
@@ -294,34 +271,34 @@ class TestSingleGridEnforcement(unittest.TestCase):
         """
 
         assert len(self.grid.empties) == 9
-        a = MockAgent(100, None)
+        a = MockAgent(100)
         with self.assertRaises(Exception):
             self.grid.place_agent(a, (0, 1))
 
         # Place the agent in an empty cell
         mock_model.schedule.get_agent_count = Mock(side_effect=lambda: len(self.agents))
-        self.grid.position_agent(a)
+        self.grid.move_to_empty(a)
         self.num_agents += 1
         # Test whether after placing, the empty cells are reduced by 1
         assert a.pos not in self.grid.empties
         assert len(self.grid.empties) == 8
         for _i in range(10):
-            self.grid.move_to_empty(a, num_agents=self.num_agents)
+            self.grid.move_to_empty(a)
         assert len(self.grid.empties) == 8
 
         # Place agents until the grid is full
         empty_cells = len(self.grid.empties)
         for i in range(empty_cells):
-            a = MockAgent(101 + i, None)
-            self.grid.position_agent(a)
+            a = MockAgent(101 + i)
+            self.grid.move_to_empty(a)
             self.num_agents += 1
         assert len(self.grid.empties) == 0
 
-        a = MockAgent(110, None)
+        a = MockAgent(110)
         with self.assertRaises(Exception):
-            self.grid.position_agent(a)
+            self.grid.move_to_empty(a)
         with self.assertRaises(Exception):
-            self.move_to_empty(self.agents[0], num_agents=self.num_agents)
+            self.move_to_empty(self.agents[0])
 
 
 # Number of agents at each position for testing
@@ -358,7 +335,7 @@ class TestMultiGrid(unittest.TestCase):
                 for _i in range(TEST_MULTIGRID[x][y]):
                     counter += 1
                     # Create and place the mock agent
-                    a = MockAgent(counter, None)
+                    a = MockAgent(counter)
                     self.agents.append(a)
                     self.grid.place_agent(a, (x, y))
 
@@ -397,7 +374,7 @@ class TestMultiGrid(unittest.TestCase):
         assert len(neighbors) == 11
 
 
-class TestHexGrid(unittest.TestCase):
+class TestHexSingleGrid(unittest.TestCase):
     """
     Testing a hexagonal singlegrid.
     """
@@ -408,7 +385,7 @@ class TestHexGrid(unittest.TestCase):
         """
         width = 3
         height = 5
-        self.grid = HexGrid(width, height, torus=False)
+        self.grid = HexSingleGrid(width, height, torus=False)
         self.agents = []
         counter = 0
         for x in range(width):
@@ -417,7 +394,7 @@ class TestHexGrid(unittest.TestCase):
                     continue
                 counter += 1
                 # Create and place the mock agent
-                a = MockAgent(counter, None)
+                a = MockAgent(counter)
                 self.agents.append(a)
                 self.grid.place_agent(a, (x, y))
 
@@ -425,7 +402,6 @@ class TestHexGrid(unittest.TestCase):
         """
         Test the hexagonal neighborhood methods on the non-toroid.
         """
-
         neighborhood = self.grid.get_neighborhood((1, 1))
         assert len(neighborhood) == 6
 
@@ -452,12 +428,10 @@ class TestHexGrid(unittest.TestCase):
         assert sum(x + y for x, y in neighborhood) == 39
 
 
-class TestHexGridTorus(TestSingleGrid):
+class TestHexSingleGridTorus(TestSingleGrid):
     """
     Testing a hexagonal toroidal singlegrid.
     """
-
-    torus = True
 
     def setUp(self):
         """
@@ -465,7 +439,7 @@ class TestHexGridTorus(TestSingleGrid):
         """
         width = 3
         height = 5
-        self.grid = HexGrid(width, height, torus=True)
+        self.grid = HexSingleGrid(width, height, torus=True)
         self.agents = []
         counter = 0
         for x in range(width):
@@ -474,7 +448,7 @@ class TestHexGridTorus(TestSingleGrid):
                     continue
                 counter += 1
                 # Create and place the mock agent
-                a = MockAgent(counter, None)
+                a = MockAgent(counter)
                 self.agents.append(a)
                 self.grid.place_agent(a, (x, y))
 
@@ -482,7 +456,6 @@ class TestHexGridTorus(TestSingleGrid):
         """
         Test the hexagonal neighborhood methods on the toroid.
         """
-
         neighborhood = self.grid.get_neighborhood((1, 1))
         assert len(neighborhood) == 6
 
@@ -506,8 +479,9 @@ class TestHexGridTorus(TestSingleGrid):
 class TestIndexing:
     # Create a grid where the content of each coordinate is a tuple of its coordinates
     grid = SingleGrid(3, 5, True)
-    for _, x, y in grid.coord_iter():
-        grid._grid[x][y] = (x, y)
+    for _, pos in grid.coord_iter():
+        x, y = pos
+        grid._grid[x][y] = pos
 
     def test_int(self):
         assert self.grid[0][0] == (0, 0)

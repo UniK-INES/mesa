@@ -1,9 +1,7 @@
-"""
-Mesa Visualization Module
--------------------------
+import contextlib
 
-TextVisualization: Base class for writing ASCII visualizations of model state.
-
-TextServer: Class which takes a TextVisualization child class as an input, and
-renders it in-browser, along with an interface.
-"""
+with contextlib.suppress(ImportError):
+    from mesa_viz_tornado.ModularVisualization import *  # noqa
+    from mesa_viz_tornado.modules import *  # noqa
+    from mesa_viz_tornado.UserParam import *  # noqa
+    from mesa_viz_tornado.TextVisualization import *  # noqa

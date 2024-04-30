@@ -14,8 +14,7 @@ name.
 
 When the collect() method is called, each model-level function is called, with
 the model as the argument, and the results associated with the relevant
-variable. Then the agent-level functions are called on each agent in the model
-scheduler.
+variable. Then the agent-level functions are called on each agent.
 
 Additionally, other objects can write directly to tables by passing in an
 appropriate dictionary object for a table row.
@@ -30,16 +29,17 @@ The DataCollector then stores the data it collects in dictionaries:
 Finally, DataCollector can create a pandas DataFrame from each collection.
 
 The default DataCollector here makes several assumptions:
-    * The model has a schedule object called 'schedule'
-    * The schedule has an agent list called agents
+    * The model has an agent list called agents
     * For collecting agent-level variables, agents must have a unique_id
 """
+
+import contextlib
 import itertools
 import types
 from functools import partial
-from operator import attrgetter
 
-import pandas as pd
+with contextlib.suppress(ImportError):
+    import pandas as pd
 
 
 class DataCollector:
@@ -52,45 +52,55 @@ class DataCollector:
     one and stores the results.
     """
 
-    def __init__(self, model_reporters=None, agent_reporters=None, tables=None):
-        """Instantiate a DataCollector with lists of model and agent reporters.
+    def __init__(
+        self,
+        model_reporters=None,
+        agent_reporters=None,
+        tables=None,
+    ):
+        """
+        Instantiate a DataCollector with lists of model and agent reporters.
         Both model_reporters and agent_reporters accept a dictionary mapping a
-        variable name to either an attribute name, or a method.
-        For example, if there was only one model-level reporter for number of
-        agents, it might look like:
-            {"agent_count": lambda m: m.schedule.get_agent_count() }
-        If there was only one agent-level reporter (e.g. the agent's energy),
-        it might look like this:
-            {"energy": "energy"}
-        or like this:
-            {"energy": lambda a: a.energy}
+        variable name to either an attribute name, a function, a method of a class/instance,
+        or a function with parameters placed in a list.
+
+        Model reporters can take four types of arguments:
+        1. Lambda function:
+           {"agent_count": lambda m: len(m.agents)}
+        2. Method of a class/instance:
+           {"agent_count": self.get_agent_count} # self here is a class instance
+           {"agent_count": Model.get_agent_count} # Model here is a class
+        3. Class attributes of a model:
+           {"model_attribute": "model_attribute"}
+        4. Functions with parameters that have been placed in a list:
+           {"Model_Function": [function, [param_1, param_2]]}
+
+        Agent reporters can similarly take:
+        1. Attribute name (string) referring to agent's attribute:
+           {"energy": "energy"}
+        2. Lambda function:
+           {"energy": lambda a: a.energy}
+        3. Method of an agent class/instance:
+           {"agent_action": self.do_action} # self here is an agent class instance
+           {"agent_action": Agent.do_action} # Agent here is a class
+        4. Functions with parameters placed in a list:
+           {"Agent_Function": [function, [param_1, param_2]]}
 
         The tables arg accepts a dictionary mapping names of tables to lists of
         columns. For example, if we want to allow agents to write their age
         when they are destroyed (to keep track of lifespans), it might look
         like:
-            {"Lifespan": ["unique_id", "age"]}
+           {"Lifespan": ["unique_id", "age"]}
 
         Args:
-            model_reporters: Dictionary of reporter names and attributes/funcs
-            agent_reporters: Dictionary of reporter names and attributes/funcs.
+            model_reporters: Dictionary of reporter names and attributes/funcs/methods.
+            agent_reporters: Dictionary of reporter names and attributes/funcs/methods.
             tables: Dictionary of table names to lists of column names.
 
         Notes:
-            If you want to pickle your model you must not use lambda functions.
-            If your model includes a large number of agents, you should *only*
-            use attribute names for the agent reporter, it will be much faster.
-
-            Model reporters can take four types of arguments:
-            lambda like above:
-            {"agent_count": lambda m: m.schedule.get_agent_count() }
-            method of a class/instance:
-            {"agent_count": self.get_agent_count} # self here is a class instance
-            {"agent_count": Model.get_agent_count} # Model here is a class
-            class attributes of a model
-            {"model_attribute": "model_attribute"}
-            functions with parameters that have placed in a list
-            {"Model_Function":[function, [param_1, param_2]]}
+            - If you want to pickle your model you must not use lambda functions.
+            - If your model includes a large number of agents, it is recommended to
+              use attribute names for the agent reporter, as it will be faster.
         """
         self.model_reporters = {}
         self.agent_reporters = {}
@@ -127,13 +137,31 @@ class DataCollector:
 
         Args:
             name: Name of the agent-level variable to collect.
-            reporter: Attribute string, or function object that returns the
-                      variable when given a model instance.
+            reporter: Attribute string, function object, method of a class/instance, or
+                      function with parameters placed in a list that returns the
+                      variable when given an agent instance.
         """
-        if type(reporter) is str:
+        # Check if the reporter is an attribute string
+        if isinstance(reporter, str):
             attribute_name = reporter
-            reporter = partial(self._getattr, reporter)
-            reporter.attribute_name = attribute_name
+
+            def attr_reporter(agent):
+                return getattr(agent, attribute_name, None)
+
+            reporter = attr_reporter
+
+        # Check if the reporter is a function with arguments placed in a list
+        elif isinstance(reporter, list):
+            func, params = reporter[0], reporter[1]
+
+            def func_with_params(agent):
+                return func(agent, *params)
+
+            reporter = func_with_params
+
+        # For other types (like lambda functions, method of a class/instance),
+        # it's already suitable to be used as a reporter directly.
+
         self.agent_reporters[name] = reporter
 
     def _new_table(self, table_name, table_columns):
@@ -149,26 +177,26 @@ class DataCollector:
     def _record_agents(self, model):
         """Record agents data in a mapping of functions and agents."""
         rep_funcs = self.agent_reporters.values()
-        if all(hasattr(rep, "attribute_name") for rep in rep_funcs):
-            prefix = ["model.schedule.steps", "unique_id"]
-            attributes = [func.attribute_name for func in rep_funcs]
-            get_reports = attrgetter(*prefix + attributes)
-        else:
 
-            def get_reports(agent):
-                _prefix = (agent.model.schedule.steps, agent.unique_id)
-                reports = tuple(rep(agent) for rep in rep_funcs)
-                return _prefix + reports
+        def get_reports(agent):
+            _prefix = (agent.model._steps, agent.unique_id)
+            reports = tuple(rep(agent) for rep in rep_funcs)
+            return _prefix + reports
 
-        agent_records = map(get_reports, model.schedule.agents)
+        agent_records = map(
+            get_reports,
+            model.schedule.agents
+            if hasattr(model, "schedule") and model.schedule is not None
+            else model.agents,
+        )
         return agent_records
 
     def collect(self, model):
         """Collect all the data for the given model object."""
         if self.model_reporters:
             for var, reporter in self.model_reporters.items():
-                # Check if Lambda operator
-                if isinstance(reporter, types.LambdaType):
+                # Check if lambda or partial function
+                if isinstance(reporter, (types.LambdaType, partial)):
                     self.model_vars[var].append(reporter(model))
                 # Check if model attribute
                 elif isinstance(reporter, str):
@@ -183,7 +211,7 @@ class DataCollector:
 
         if self.agent_reporters:
             agent_records = self._record_agents(model)
-            self._agent_records[model.schedule.steps] = list(agent_records)
+            self._agent_records[model._steps] = list(agent_records)
 
     def add_table_row(self, table_name, row, ignore_missing=False):
         """Add a row dictionary to a specific table.
@@ -204,11 +232,6 @@ class DataCollector:
                 self.tables[table_name][column].append(None)
             else:
                 raise Exception("Could not insert row with missing column")
-
-    @staticmethod
-    def _getattr(name, _object):
-        """Turn around arguments of getattr to make it partially callable."""
-        return getattr(_object, name, None)
 
     def get_model_vars_dataframe(self):
         """Create a pandas DataFrame from the model variables.

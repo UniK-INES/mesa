@@ -1,19 +1,39 @@
 from collections import defaultdict
 from unittest import TestCase
 
+import mesa
 from mesa.model import Model
 from mesa.space import MultiGrid
 from mesa.time import SimultaneousActivation
 from mesa.visualization.ModularVisualization import ModularServer
 from mesa.visualization.modules import CanvasGrid, TextElement
-from mesa.visualization.UserParam import UserSettableParameter
-from tests.test_batchrunner import MockAgent
+from mesa.visualization.UserParam import (
+    NumberInput,
+    Slider,
+)
+
+
+class MockAgent(mesa.Agent):
+    """
+    Minimalistic agent implementation for testing purposes
+    """
+
+    def __init__(self, unique_id, model, val):
+        super().__init__(unique_id, model)
+        self.unique_id = unique_id
+        self.val = val
+        self.local = 0
+
+    def step(self):
+        self.val += 1
+        self.local += 0.25
 
 
 class MockModel(Model):
     """Test model for testing"""
 
     def __init__(self, width, height, key1=103, key2=104):
+        super().__init__()
         self.width = width
         self.height = height
         self.key1 = (key1,)
@@ -21,7 +41,8 @@ class MockModel(Model):
         self.schedule = SimultaneousActivation(self)
         self.grid = MultiGrid(width, height, torus=True)
 
-        for _c, x, y in self.grid.coord_iter():
+        for _c, pos in self.grid.coord_iter():
+            x, y = pos
             a = MockAgent(x + y * 100, self, x * y * 3)
             self.grid.place_agent(a, (x, y))
             self.schedule.add(a)
@@ -49,8 +70,8 @@ class TestModularServer(TestCase):
         self.user_params = {
             "width": 1,
             "height": 1,
-            "key1": UserSettableParameter("number", "Test Parameter", 101),
-            "key2": UserSettableParameter("slider", "Test Parameter", 200, 0, 300, 10),
+            "key1": NumberInput("Test Parameter", 101),
+            "key2": Slider("Test Parameter", 200, 0, 300, 10),
         }
 
         self.viz_elements = [
@@ -79,8 +100,6 @@ class TestModularServer(TestCase):
     def test_user_params(self):
         print(self.server.user_params)
         assert self.server.user_params == {
-            "key1": UserSettableParameter("number", "Test Parameter", 101).json,
-            "key2": UserSettableParameter(
-                "slider", "Test Parameter", 200, 0, 300, 10
-            ).json,
+            "key1": NumberInput("Test Parameter", 101).json,
+            "key2": Slider("Test Parameter", 200, 0, 300, 10).json,
         }

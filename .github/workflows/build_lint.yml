@@ -7,11 +7,9 @@ on:
     - release**
     paths-ignore:
       - '**.md'
-      - '**.rst'
   pull_request:
     paths-ignore:
       - '**.md'
-      - '**.rst'
 
 # This will cancel previous run if a newer job that obsoletes the said previous
 # run, is started.
@@ -30,58 +28,55 @@ jobs:
       fail-fast: False
       matrix:
         os: [windows, ubuntu, macos]
-        python-version: ["3.11"]
+        python-version: ["3.12"]
         include:
+          - os: ubuntu
+            python-version: "3.11"
           - os: ubuntu
             python-version: "3.10"
           - os: ubuntu
             python-version: "3.9"
-          - os: ubuntu
-            python-version: "3.8"
           # Disabled for now. See https://github.com/projectmesa/mesa/issues/1253
           #- os: ubuntu
           #  python-version: 'pypy-3.8'
 
     steps:
-    - uses: actions/checkout@v3
+    - uses: actions/checkout@v4
     - name: Set up Python ${{ matrix.python-version }}
-      uses: actions/setup-python@v4
+      uses: actions/setup-python@v5
       with:
         python-version: ${{ matrix.python-version }}
-    - uses: actions/cache@v3
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ matrix.python-version }}-${{ hashFiles('Pipfile.lock') }}
-    - name: Install dependencies
-      run: pip install wheel && pip install .[dev]
+        cache: 'pip'
+    - name: Install uv
+      run: pip install uv
+    - name: Install Mesa
+      # See https://github.com/astral-sh/uv/issues/1945
+      run: uv pip install --system .[dev]
     - name: Test with pytest
-      run: pytest --cov=mesa tests/ --cov-report=xml
+      run: pytest --durations=10 --cov=mesa tests/ --cov-report=xml
     - if: matrix.os == 'ubuntu'
       name: Codecov
-      uses: codecov/codecov-action@v3
+      uses: codecov/codecov-action@v4
 
-  lint-ruff:
+  examples:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v4
+    - uses: actions/checkout@v4
+    - name: Set up Python
+      uses: actions/setup-python@v5
       with:
-        python-version: "3.10"
-    - run: pip install ruff==0.0.254
-    - name: Lint with ruff
-      # Include `--format=github` to enable automatic inline annotations.
-      # Use settings from pyproject.toml.
-      run: ruff . --format=github --extend-exclude 'mesa/cookiecutter-mesa/*'
-
-  lint-black:
-    runs-on: ubuntu-latest
-    steps:
-    - uses: actions/checkout@v3
-    - name: Set up Python 3.10
-      uses: actions/setup-python@v4
+        python-version: "3.12"
+        cache: 'pip'
+    - name: Install uv
+      run: pip install uv
+    - name: Install Mesa
+      run: uv pip install --system .[dev]
+    - name: Checkout mesa-examples
+      uses: actions/checkout@v4
       with:
-        python-version: "3.10"
-    - run: pip install black[jupyter]
-    - name: Lint with black
-      run: black --check --exclude=mesa/cookiecutter-mesa/* .
+        repository: projectmesa/mesa-examples
+        path: mesa-examples
+    - name: Test examples
+      run: |
+        cd mesa-examples
+        pytest test_examples.py

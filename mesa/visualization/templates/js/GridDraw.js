@@ -11,7 +11,7 @@ a JSON object to an inner list (keyed on layer) of lists to be sent to the
 browser.
 
 Each JSON object to be drawn contains the following fields: Shape (currently
-only rectanges and circles are supported), x, y, Color, Filled (boolean),
+only rectangles and circles are supported), x, y, Color, Filled (boolean),
 Layer; circles also get a Radius, while rectangles get x and y sizes. The
 latter values are all between [0, 1] and get scaled to the grid cell.
 
@@ -383,7 +383,7 @@ const GridVisualization = function (
   };
 
   /**
-        Draw Grid lines in the full gird
+        Draw Grid lines in the full grid
         */
 
   this.drawGridLines = function () {
