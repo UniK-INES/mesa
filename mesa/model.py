@@ -14,12 +14,12 @@ import warnings
 from collections import defaultdict
 
 # mypy
-from typing import Any, Union
+from typing import Any
 
 from mesa.agent import Agent, AgentSet
 from mesa.datacollection import DataCollector
 
-TimeT = Union[float, int]
+TimeT = float | int
 
 
 class Model:
@@ -58,7 +58,7 @@ class Model:
             # advance.
             obj._seed = random.random()
         obj.random = random.Random(obj._seed)
-        print("Running Mesa INES's Model...")
+
         # TODO: Remove these 2 lines just before Mesa 3.0
         obj._steps = 0
         obj._time = 0
