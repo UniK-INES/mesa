@@ -1,7 +1,10 @@
+import matplotlib.pyplot as plt
 import networkx as nx
 import solara
 from matplotlib.figure import Figure
+from matplotlib.offsetbox import AnnotationBbox, OffsetImage
 from matplotlib.ticker import MaxNLocator
+from PIL import Image
 
 import mesa
 
@@ -9,6 +12,7 @@ import mesa
 @solara.component
 def SpaceMatplotlib(model, agent_portrayal, dependencies: list[any] | None = None):
     space_fig = Figure()
+    space_fig.set_size_inches(5, 5)
     space_ax = space_fig.subplots()
     space = getattr(model, "grid", None)
     if space is None:
@@ -24,11 +28,17 @@ def SpaceMatplotlib(model, agent_portrayal, dependencies: list[any] | None = Non
 
 
 def _draw_grid(space, space_ax, agent_portrayal):
-    def portray(g):
+    def getImage(path, size):
+        image = OffsetImage(plt.imread(path, format="png"))
+        image.set(width=16)
+        return image
+
+    def portray(g, ax):
         x = []
         y = []
         s = []  # size
         c = []  # color
+        artist_size = 300 / min(g.width, g.height)
         for i in range(g.width):
             for j in range(g.height):
                 content = g._grid[i][j]
@@ -45,6 +55,13 @@ def _draw_grid(space, space_ax, agent_portrayal):
                         s.append(data["size"])
                     if "color" in data:
                         c.append(data["color"])
+                    if "shape" in data:
+                        # shape = BytesIO(requests.get(data["shape"]).content)
+                        shape = data["shape"]
+                        img = Image.open(shape)
+                        img.thumbnail((artist_size, artist_size))
+                        ab = AnnotationBbox(OffsetImage(img), (i, j), frameon=False)
+                        ax.add_artist(ab)
         out = {"x": x, "y": y}
         # This is the default value for the marker size, which auto-scales
         # according to the grid area.
@@ -57,7 +74,8 @@ def _draw_grid(space, space_ax, agent_portrayal):
 
     space_ax.set_xlim(-1, space.width)
     space_ax.set_ylim(-1, space.height)
-    space_ax.scatter(**portray(space))
+
+    space_ax.scatter(**portray(space, space_ax))
 
 
 def _draw_network_grid(space, space_ax, agent_portrayal):
