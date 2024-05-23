@@ -122,6 +122,11 @@ def JupyterViz(
 
     def render_in_jupyter():
         with solara.GridFixed(columns=2):
+            solara.InputText(
+                label="Seed",
+                value=reactive_seed,
+                continuous_update=True,
+            )
             UserInputs(user_params, on_change=handle_change_model_params)
             ModelController(model, play_interval, current_step, reset_counter)
             solara.Markdown(md_text=f"###Step - {current_step}")
@@ -391,7 +396,7 @@ def make_initial_grid_layout(layout_types):
         {
             "i": i,
             "w": 6,
-            "h": 10,
+            "h": 14,
             "moved": False,
             "x": 6 * (i % 2),
             "y": 16 * (i - i % 2),
