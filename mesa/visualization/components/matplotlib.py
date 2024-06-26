@@ -10,16 +10,22 @@ import mesa
 
 
 @solara.component
-def SpaceMatplotlib(model, agent_portrayal, dependencies: list[any] | None = None):
+def SpaceMatplotlib(
+    model, agent_portrayal, graph_portrayal, dependencies: list[any] | None = None
+):
     space_fig = Figure()
-    space_fig.set_size_inches(5, 5)
+    space_fig.set_size_inches(10, 10)
     space_ax = space_fig.subplots()
     space = getattr(model, "grid", None)
+    net = getattr(model, "net", None)
     if space is None:
         # Sometimes the space is defined as model.space instead of model.grid
         space = model.space
-    if isinstance(space, mesa.space.NetworkGrid):
+    if isinstance(net, mesa.space.NetworkGrid) and graph_portrayal is not None:
+        _draw_network_grid(net, space_ax, graph_portrayal)
+    elif isinstance(space, mesa.space.NetworkGrid):
         _draw_network_grid(space, space_ax, agent_portrayal)
+
     elif isinstance(space, mesa.space.ContinuousSpace):
         _draw_continuous_space(space, space_ax, agent_portrayal)
     else:

@@ -1522,6 +1522,8 @@ class NetworkGrid:
             G: a NetworkX graph instance.
         """
         self.G = g
+        self.agents = {}
+
         for node_id in self.G.nodes:
             g.nodes[node_id]["agent"] = self.default_val()
 
@@ -1530,11 +1532,10 @@ class NetworkGrid:
         """Default value for a new node."""
         return []
 
-    @warn_if_agent_has_position_already
     def place_agent(self, agent: Agent, node_id: int) -> None:
         """Place an agent in a node."""
         self.G.nodes[node_id]["agent"].append(agent)
-        agent.pos = node_id
+        self.agents[agent] = node_id
 
     def get_neighborhood(
         self, node_id: int, include_center: bool = False, radius: int = 1
@@ -1554,8 +1555,9 @@ class NetworkGrid:
         return neighborhood
 
     def get_neighbors(
-        self, node_id: int, include_center: bool = False, radius: int = 1
+        self, agent: Agent, include_center: bool = False, radius: int = 1
     ) -> list[Agent]:
+        node_id = self.agents[agent]
         """Get all agents in adjacent nodes (within a certain radius)."""
         neighborhood = self.get_neighborhood(node_id, include_center, radius)
         return self.get_cell_list_contents(neighborhood)
@@ -1567,9 +1569,10 @@ class NetworkGrid:
 
     def remove_agent(self, agent: Agent) -> None:
         """Remove the agent from the network and set its pos attribute to None."""
-        node_id = agent.pos
+        node_id = self.agents[agent]
+
         self.G.nodes[node_id]["agent"].remove(agent)
-        agent.pos = None
+        self.agents[agent] = None
 
     def is_cell_empty(self, node_id: int) -> bool:
         """Returns a bool of the contents of a cell."""

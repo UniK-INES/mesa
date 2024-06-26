@@ -17,7 +17,13 @@ plt.switch_backend("agg")
 # TODO: Turn this function into a Solara component once the current_step.value
 # dependency is passed to measure()
 def Card(
-    model, measures, agent_portrayal, space_drawer, dependencies, color, layout_type
+    model,
+    measures,
+    agent_portrayal,
+    space_drawer,
+    dependencies,
+    color,
+    layout_type,
 ):
     with rv.Card(
         style_=f"background-color: {color}; width: 100%; height: 100%"
@@ -56,6 +62,7 @@ def JupyterViz(
     measures=None,
     name=None,
     agent_portrayal=None,
+    graph_portrayal=None,
     space_drawer="default",
     play_interval=150,
     seed=None,
@@ -122,22 +129,29 @@ def JupyterViz(
 
     def render_in_jupyter():
         with solara.GridFixed(columns=2):
-            solara.InputText(
-                label="Seed",
-                value=reactive_seed,
-                continuous_update=True,
-            )
+            with solara.Column(gap="10px"):
+                solara.InputText(
+                    label="Seed",
+                    value=reactive_seed,
+                    continuous_update=True,
+                )
+                ModelController(model, play_interval, current_step, reset_counter)
+                solara.Markdown(md_text=f"###Step - {current_step}")
+
             UserInputs(user_params, on_change=handle_change_model_params)
-            ModelController(model, play_interval, current_step, reset_counter)
-            solara.Markdown(md_text=f"###Step - {current_step}")
 
         with solara.GridFixed(columns=2):
             # 4. Space
             if space_drawer == "default":
                 # draw with the default implementation
                 components_matplotlib.SpaceMatplotlib(
-                    model, agent_portrayal, dependencies=dependencies
+                    model, agent_portrayal, None, dependencies=dependencies
                 )
+                if graph_portrayal is not None:
+                    components_matplotlib.SpaceMatplotlib(
+                        model, None, graph_portrayal, dependencies=dependencies
+                    )
+
             elif space_drawer == "altair":
                 components_altair.SpaceAltair(
                     model, agent_portrayal, dependencies=dependencies
@@ -178,7 +192,7 @@ def JupyterViz(
                 ModelController(model, play_interval, current_step, reset_counter)
                 solara.Button(label="Reseed", color="primary", on_click=do_reseed)
             with solara.Card("Information", margin=1, elevation=2):
-                solara.Markdown(md_text=f"Step - {current_step}")
+                solara.Markdown(md_text=f"Step {current_step}")
 
         items = [
             Card(
