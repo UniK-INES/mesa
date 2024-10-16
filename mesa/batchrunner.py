@@ -1,4 +1,7 @@
+"""batchrunner for running a factorial experiment design over a model."""
+
 import itertools
+import multiprocessing
 from collections.abc import Iterable, Mapping
 from functools import partial
 from multiprocessing import Pool
@@ -7,6 +10,8 @@ from typing import Any
 from tqdm.auto import tqdm
 
 from mesa.model import Model
+
+multiprocessing.set_start_method("spawn", force=True)
 
 
 def batch_run(
@@ -21,29 +26,22 @@ def batch_run(
 ) -> list[dict[str, Any]]:
     """Batch run a mesa model with a set of parameter values.
 
-    Parameters
-    ----------
-    model_cls : Type[Model]
-        The model class to batch-run
-    parameters : Mapping[str, Union[Any, Iterable[Any]]],
-        Dictionary with model parameters over which to run the model. You can either pass single values or iterables.
-    number_processes : int, optional
-        Number of processes used, by default 1. Set this to None if you want to use all CPUs.
-    iterations : int, optional
-        Number of iterations for each parameter combination, by default 1
-    data_collection_period : int, optional
-        Number of steps after which data gets collected, by default -1 (end of episode)
-    max_steps : int, optional
-        Maximum number of model steps after which the model halts, by default 1000
-    display_progress : bool, optional
-        Display batch run process, by default True
+    Args:
+        model_cls (Type[Model]): The model class to batch-run
+        parameters (Mapping[str, Union[Any, Iterable[Any]]]): Dictionary with model parameters over which to run the model. You can either pass single values or iterables.
+        number_processes (int, optional): Number of processes used, by default 1. Set this to None if you want to use all CPUs.
+        iterations (int, optional): Number of iterations for each parameter combination, by default 1
+        data_collection_period (int, optional): Number of steps after which data gets collected, by default -1 (end of episode)
+        max_steps (int, optional): Maximum number of model steps after which the model halts, by default 1000
+        display_progress (bool, optional): Display batch run process, by default True
 
-    Returns
-    -------
-    List[Dict[str, Any]]
-        [description]
+    Returns:
+        List[Dict[str, Any]]
+
+    Notes:
+        batch_run assumes the model has a `datacollector` attribute that has a DataCollector object initialized.
+
     """
-
     runs_list = []
     run_id = 0
     for iteration in range(iterations):
@@ -85,7 +83,7 @@ def _make_model_kwargs(
     parameters : Mapping[str, Union[Any, Iterable[Any]]]
         Single or multiple values for each model parameter name
 
-    Returns
+    Returns:
     -------
     List[Dict[str, Any]]
         A list of all kwargs combinations.
@@ -125,21 +123,21 @@ def _model_run_func(
     data_collection_period : int
         Number of steps after which data gets collected
 
-    Returns
+    Returns:
     -------
     List[Dict[str, Any]]
         Return model_data, agent_data from the reporters
     """
     run_id, iteration, kwargs = run
     model = model_cls(**kwargs)
-    while model.running and model.schedule.steps <= max_steps:
+    while model.running and model.steps <= max_steps:
         model.step()
 
     data = []
 
-    steps = list(range(0, model.schedule.steps, data_collection_period))
-    if not steps or steps[-1] != model.schedule.steps - 1:
-        steps.append(model.schedule.steps - 1)
+    steps = list(range(0, model.steps, data_collection_period))
+    if not steps or steps[-1] != model.steps - 1:
+        steps.append(model.steps - 1)
 
     for step in steps:
         model_data, all_agents_data = _collect_data(model, step)
@@ -178,6 +176,10 @@ def _collect_data(
     step: int,
 ) -> tuple[dict[str, Any], list[dict[str, Any]]]:
     """Collect model and agent data from a model using mesas datacollector."""
+    if not hasattr(model, "datacollector"):
+        raise AttributeError(
+            "The model does not have a datacollector attribute. Please add a DataCollector to your model."
+        )
     dc = model.datacollector
 
     model_data = {param: values[step] for param, values in dc.model_vars.items()}

@@ -1,3 +1,4 @@
+# noqa: D100
 #!/usr/bin/env python3
 #
 # Mesa documentation build configuration file, created by
@@ -12,10 +13,9 @@
 # All configuration values have a default; values that are commented out
 # serve to show the default.
 
-import sys
 import os
+import sys
 from datetime import date
-
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
@@ -42,6 +42,7 @@ extensions = [
     "sphinx.ext.mathjax",
     "sphinx.ext.ifconfig",
     "sphinx.ext.viewcode",
+    "sphinx.ext.napoleon",  # for google style docstrings
     "myst_nb",  # For Markdown and Jupyter notebooks
 ]
 
@@ -113,6 +114,8 @@ pygments_style = "gruvbox-dark"
 
 nb_execution_timeout = 60
 nb_execution_mode = "cache"
+nb_execution_allow_errors = False
+nb_execution_raise_on_error = True
 
 # -- Options for HTML output ----------------------------------------------
 
@@ -123,7 +126,13 @@ html_theme = "pydata_sphinx_theme"
 # Theme options are theme-specific and customize the look and feel of a theme
 # further.  For a list of options available for each theme, see the
 # documentation.
-# html_theme_options = {}
+html_theme_options = {
+    "navbar_start": ["navbar-logo", "version-switcher"],  # Show switcher in navbar
+    "switcher": {
+        "json_url": "https://mesa.readthedocs.io/latest/_static/switcher.json",  # URL of your switcher.json file
+        "version_match": version  # Automatically matches the current version
+    }
+}
 
 # Add any paths that contain custom themes here, relative to this directory.
 # html_theme_path = []
@@ -279,4 +288,4 @@ texinfo_documents = [
 
 
 # Example configuration for intersphinx: refer to the Python standard library.
-intersphinx_mapping = {"http://docs.python.org/": None}
+intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}

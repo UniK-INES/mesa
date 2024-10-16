@@ -36,6 +36,40 @@ discuss via [Matrix] OR via [an issue].
 - Describe the change w/ ticket number(s) that the code fixes.
 - Format your commit message as per [Tim Pope's guideline].
 
+## I have no idea where to start
+That's fine! Here's a rough outline where you could start, depending on your experience:
+
+### I'm a modeller (but not an experienced developer)
+You already know how to build Mesa models (if not skip below), and probably have found things Mesa can't do (elegantly). You want to improve that. Awesome!
+
+First step is to install some proper tools, if you haven't already.
+- A good IDE helps for code development, testing and formatting. [PyCharm](https://www.jetbrains.com/pycharm/) or [VSCode](https://code.visualstudio.com/) for example.
+- Dive into Git and GitHub. Watch some videos, this takes some time to click. [GitHub Desktop](https://desktop.github.com/) is great.
+- [`https://github.dev/projectmesa/mesa`](https://github.dev/projectmesa/mesa) is great for small changes (to docs).
+
+Learn the tools, talk to us about what you want to change, and open a small PR. Or update an [example model](https://github.com/projectmesa/mesa-examples) (check open [issues](https://github.com/projectmesa/mesa-examples/issues))!
+
+### I'm a developer (but not a modeller)
+Awesome! You have the basics of open-source software development (if not check above), but not much modelling experience.
+
+First step is to start thinking like a modeller. To understand the fine details about our library and contribute meaningfully, get some modelling experience:
+- Go though our [Introductory Tutorial](https://mesa.readthedocs.io/latest/tutorials/intro_tutorial.html) and [Visualization Tutorial](https://mesa.readthedocs.io/latest/tutorials/visualization_tutorial.html). While going through them, dive into the source code to really see what everything does.
+- Follow an ABM course (if possible). They might be a bit outdated programming language wise, but conceptual they're sound.
+  - This MOOC on ABM concepts: [Agent Based Modeling](https://ocw.tudelft.nl/course-lectures/agent-based-modeling/)
+  - This MOOC on practical ABM modelling: [Agent-Based Models with Python: An Introduction to Mesa](https://www.complexityexplorer.org/courses/172-agent-based-models-with-python-an-introduction-to-mesa)
+- Go though multiple of our [examples](https://github.com/projectmesa/mesa-examples). Play with them, modify things and get a feel for Mesa and ABMs.
+  - Check our open [issues](https://github.com/projectmesa/mesa-examples/issues) for the examples.
+  - If you see anything you want to improve, feel free to open a (small) PR!
+- If you have a feel for Mesa, check our [discussions](https://github.com/projectmesa/mesa/discussions) and [issues](https://github.com/projectmesa/mesa/issues).
+  - Also go thought our [release notes](https://github.com/projectmesa/mesa/releases) to see what we recently have been working on, and see some examples of successful PRs.
+- Once you found or thought of a nice idea, comment on the issue/discussion (or open a new one) and get to work!
+
+### I'm both
+That's great! You can just start working on things, reach out to us. Skim to the list above if you feel you're missing anything. Start small but don't be afraid to dream big!
+
+### I'm neither
+Start with creating your own models, for fun. Once you have some experience, move to the topics above.
+
 ## Testing and Code Standards
 
 ```{image} https://codecov.io/gh/projectmesa/mesa/branch/main/graph/badge.svg
@@ -84,6 +118,24 @@ ruff .
 ## Licensing
 
 The license of this project is located in [LICENSE].  By submitting a contribution to this project, you are agreeing that your contribution will be released under the terms of this license.
+
+## Maintainers
+Some notes useful for Mesa maintainers.
+
+### Releases
+To create a new release, follow these steps:
+
+1. Ensure all pull requests (PRs) have a clear title and are labeled with at least one label. Check [this link](https://github.com/projectmesa/mesa/pulls?q=is%3Apr+is%3Amerged+no%3Alabel+merged%3A%3E%3D2024-03-01+) to see if all PRs are labeled. These labels will be used when drafting the changelog using the [`.github/release.yml`](https://github.com/projectmesa/mesa/blob/main/.github/release.yml) configuration.
+2. Navigate to the [Releases](https://github.com/projectmesa/mesa/releases) section in the GitHub UI and click the _Draft a new release_ button.
+3. Specify the upcoming tag in the _Choose a tag_ and _Release title_ fields (e.g., `v3.0.0`).
+   - For pre-releases, add a `a`, `b` or `rc` and a number behind the version tag (see [Versioning](https://packaging.python.org/en/latest/discussions/versioning/)), and check the box _Set as a pre-release_.
+4. Use the _Generate release notes_ button to automatically create release notes. Review them carefully for accuracy, and update labels and edit PR titles if necessary (step 1).
+5. Write a _Highlights_ section summarizing the most important features or changes in this release.
+6. Copy the release notes and save them by clicking the grey _Save draft_ button.
+7. Open a new PR to update the version number in [`mesa/__init__.py`](https://github.com/projectmesa/mesa/blob/main/mesa/__init__.py) and add the copied release notes to the [`HISTORY.md`](https://github.com/projectmesa/mesa/blob/main/HISTORY.md).
+8. Once this PR is merged, return to the _Releases_ section and publish the draft release.
+9. The [`release.yml`](https://github.com/projectmesa/mesa/blob/main/.github/workflows/release.yml) CI workflow should automatically create and upload the package to PyPI. Verify this on [PyPI.org](https://pypi.org/project/mesa/).
+10. Finally, after release, open a new PR to update the version number in [`mesa/__init__.py`](https://github.com/projectmesa/mesa/blob/main/mesa/__init__.py) for the next release (e.g., `"3.1.0.dev"`).
 
 ## Special Thanks
 

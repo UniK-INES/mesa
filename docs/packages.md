@@ -73,9 +73,9 @@ Most likely you created an ABM that has the code that you want to share in it, w
 
 **Sharing your package**
 
-> 1. Layout a new file structure to move the code into and then make sure it is callable from Mesa, in a simple, easy to understand way. For example, `from example_package import foo`.  See [Creating the Scaffolding](https://python-packaging.readthedocs.io/en/latest/minimal.html#creating-the-scaffolding).
+> 1. Layout a new file structure to move the code into and then make sure it is callable from Mesa, in a simple, easy to understand way. For example, `from example_package import foo`.  See [Creating the Scaffolding](https://python-packaging.readthedocs.io/latest/minimal.html#creating-the-scaffolding).
 >
-> 2. [Pick a name](https://python-packaging.readthedocs.io/en/latest/minimal.html#picking-a-name).
+> 2. [Pick a name](https://python-packaging.readthedocs.io/latest/minimal.html#picking-a-name).
 >
 > 3. [Create a repo on GitHub](https://help.github.com/articles/create-a-repo/).
 >
@@ -91,7 +91,7 @@ Most likely you created an ABM that has the code that you want to share in it, w
 >
 > 7. `git add` all the files to the repo, which means the repo starts to track the files. Then `git commit` the files with a meaningful message. To learn more about this see: [Saving changes](https://www.atlassian.com/git/tutorials/saving-changes). Finally, you will want to `git push` all your changes to GitHub, see: [Git Push](https://help.github.com/articles/pushing-to-a-remote/).
 >
-> 8. Let people know about your package on the [MESA Wiki Page](https://github.com/projectmesa/mesa/wiki) and share it on the [email list](https://groups.google.com/forum/#!forum/projectmesa). In the future, we will create more of a directory, but at this point we are not there yet.
+> 8. Let people know about your package on the [MESA Wiki Page](https://github.com/projectmesa/mesa/wiki) and share it in the [matrix chat room](https://matrix.to/#/#project-mesa:matrix.org). In the future, we will create more of a directory, but at this point we are not there yet.
 
 From this point, someone can clone your repo and then add your repo to their Python path and use it in their project. However, if you want to take your package to the next level, you will want to add more structure to your package and share it on PyPI.
 

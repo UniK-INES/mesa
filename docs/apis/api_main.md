@@ -3,10 +3,12 @@
 ```{toctree}
 :maxdepth: 3
 
-Base Classes <init>
+model
+agent
 time
 space
 datacollection
 batchrunner
 visualization
+experimental
 ```

@@ -28,6 +28,7 @@ classifiers = [
   "Programming Language :: Python :: 3.10",
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
+  "Programming Language :: Python :: 3.13",
   "License :: OSI Approved :: Apache Software License",
   "Operating System :: OS Independent",
   "Development Status :: 3 - Alpha",
@@ -35,34 +36,47 @@ classifiers = [
 ]
 readme = "README.md"
 dependencies = [
-  "click",
-  "cookiecutter",
-  "matplotlib",
-  "mesa_viz_tornado~=0.1.0,>=0.1.3",
-  "networkx",
   "numpy",
   "pandas",
-  "solara",
   "tqdm",
 ]
 dynamic = ["version"]
 
 [project.optional-dependencies]
+# User collections
+rec = ["mesa[network,viz]"]
+all = ["mesa[network,viz,dev,examples,docs]"]
+# Core dependencies
+network = [
+  "networkx",
+]
+viz = [
+  "matplotlib",
+  "solara",
+]
+# Dev and CI stuff
 dev = [
-  "ruff~=0.1.1",   # Update periodically
-  "coverage",
-  "pytest >= 4.6",
+  "mesa[rec]",
+  "ruff",
+  "pytest",
   "pytest-cov",
   "sphinx",
   "pytest-mock",
+  "cookiecutter",
+]
+examples = [
+  "mesa[rec]",
+  "pytest",
+  "scipy",
 ]
 docs = [
+  "mesa[rec]",
   "sphinx",
   "ipython",
   "pydata_sphinx_theme",
   "seaborn",
   "myst-nb",
-  "myst-parser",         # Markdown in Sphinx
+  "myst-parser",  # Markdown in Sphinx
 ]
 
 [project.urls]
@@ -83,7 +97,7 @@ path = "mesa/__init__.py"
 # Hardcode to Python 3.10.
 # Reminder to update mesa-examples if the value below is changed.
 target-version = "py310"
-extend-exclude = ["docs", "build"]
+extend-exclude = ["docs", "build", "examples"]
 
 [tool.ruff.lint]
 select = [
@@ -110,6 +124,7 @@ select = [
   "UP",  # upgrade
   "W",   # style warnings
   "YTT", # sys.version
+  "D",  # docstring
 ]
 # Ignore list taken from https://github.com/psf/black/blob/master/.flake8
 # E203	Whitespace before ':'
@@ -133,3 +148,5 @@ extend-ignore = [
   "ISC001", # ruff format asks to disable this feature
   "S311",   # Standard pseudo-random generators are not suitable for cryptographic purposes
 ]
+[tool.ruff.lint.pydocstyle]
+convention = "google"

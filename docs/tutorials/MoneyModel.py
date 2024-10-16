@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-
+"""a simple version of the boltman wealth model"""
 
 import mesa
 
@@ -15,11 +14,17 @@ def compute_gini(model):
 class MoneyAgent(mesa.Agent):
     """An agent with fixed initial wealth."""
 
-    def __init__(self, unique_id, model):
-        super().__init__(unique_id, model)
+    def __init__(self, model):
+        """initialize a MoneyAgent instance.
+
+        Args:
+            model: A model instance
+        """
+        super().__init__(model)
         self.wealth = 1
 
     def move(self):
+        """move to a random neighboring cell."""
         possible_steps = self.model.grid.get_neighborhood(
             self.pos, moore=True, include_center=False
         )
@@ -27,6 +32,7 @@ class MoneyAgent(mesa.Agent):
         self.model.grid.move_agent(self, new_position)
 
     def give_money(self):
+        """give money to another agent in the same gridcell."""
         cellmates = self.model.grid.get_cell_list_contents([self.pos])
         if len(cellmates) > 1:
             other = self.random.choice(cellmates)
@@ -34,6 +40,7 @@ class MoneyAgent(mesa.Agent):
             self.wealth -= 1
 
     def step(self):
+        """do one step of the agent."""
         self.move()
         if self.wealth > 0:
             self.give_money()
@@ -42,15 +49,22 @@ class MoneyAgent(mesa.Agent):
 class MoneyModel(mesa.Model):
     """A model with some number of agents."""
 
-    def __init__(self, N, width, height):
-        super().__init__()
+    def __init__(self, N, width, height, seed=None):
+        """Initialize a MoneyModel instance.
+
+        Args:
+            N: The number of agents.
+            width: width of the grid.
+            height: Height of the grid.
+        """
+        super().__init__(seed=seed)
         self.num_agents = N
         self.grid = mesa.space.MultiGrid(width, height, True)
         self.schedule = mesa.time.RandomActivation(self)
 
         # Create agents
-        for i in range(self.num_agents):
-            a = MoneyAgent(i, self)
+        for _ in range(self.num_agents):
+            a = MoneyAgent(self)
             self.schedule.add(a)
             # Add the agent to a random grid cell
             x = self.random.randrange(self.grid.width)
@@ -62,5 +76,6 @@ class MoneyModel(mesa.Model):
         )
 
     def step(self):
+        """do one step of the model"""
         self.datacollector.collect(self)
         self.schedule.step()

@@ -1,3 +1,5 @@
+"""Various Grid Spaces."""
+
 from __future__ import annotations
 
 from collections.abc import Sequence
@@ -10,8 +12,8 @@ from mesa.experimental.cell_space import Cell, DiscreteSpace
 T = TypeVar("T", bound=Cell)
 
 
-class Grid(DiscreteSpace, Generic[T]):
-    """Base class for all grid classes
+class Grid(DiscreteSpace[T], Generic[T]):
+    """Base class for all grid classes.
 
     Attributes:
         dimensions (Sequence[int]): the dimensions of the grid
@@ -20,7 +22,20 @@ class Grid(DiscreteSpace, Generic[T]):
         random (Random): the random number generator
         _try_random (bool): whether to get empty cell be repeatedly trying random cell
 
+    Notes:
+        width and height are accessible via properties, higher dimensions can be retrieved via dimensions
+
     """
+
+    @property
+    def width(self) -> int:
+        """Convenience access to the width of the grid."""
+        return self.dimensions[0]
+
+    @property
+    def height(self) -> int:
+        """Convenience access to the height of the grid."""
+        return self.dimensions[1]
 
     def __init__(
         self,
@@ -30,6 +45,15 @@ class Grid(DiscreteSpace, Generic[T]):
         random: Random | None = None,
         cell_klass: type[T] = Cell,
     ) -> None:
+        """Initialise the grid class.
+
+        Args:
+            dimensions: the dimensions of the space
+            torus: whether the space wraps
+            capacity: capacity of the grid cell
+            random: a random number generator
+            cell_klass: the base class to use for the cells
+        """
         super().__init__(capacity=capacity, random=random, cell_klass=cell_klass)
         self.torus = torus
         self.dimensions = dimensions
@@ -63,7 +87,7 @@ class Grid(DiscreteSpace, Generic[T]):
         if self.capacity is not None and not isinstance(self.capacity, float | int):
             raise ValueError("Capacity must be a number or None.")
 
-    def select_random_empty_cell(self) -> T:
+    def select_random_empty_cell(self) -> T:  # noqa
         # FIXME:: currently just a simple boolean to control behavior
         # FIXME:: basically if grid is close to 99% full, creating empty list can be faster
         # FIXME:: note however that the old results don't apply because in this implementation
@@ -89,7 +113,7 @@ class Grid(DiscreteSpace, Generic[T]):
             if self.torus:
                 n_coord = tuple(nc % d for nc, d in zip(n_coord, self.dimensions))
             if all(0 <= nc < d for nc, d in zip(n_coord, self.dimensions)):
-                cell.connect(self._cells[n_coord])
+                cell.connect(self._cells[n_coord], d_coord)
 
     def _connect_single_cell_2d(self, cell: T, offsets: list[tuple[int, int]]) -> None:
         i, j = cell.coordinate
@@ -100,7 +124,7 @@ class Grid(DiscreteSpace, Generic[T]):
             if self.torus:
                 ni, nj = ni % height, nj % width
             if 0 <= ni < height and 0 <= nj < width:
-                cell.connect(self._cells[ni, nj])
+                cell.connect(self._cells[ni, nj], (di, dj))
 
 
 class OrthogonalMooreGrid(Grid[T]):
@@ -122,7 +146,6 @@ class OrthogonalMooreGrid(Grid[T]):
             ( 1, -1), ( 1, 0), ( 1, 1),
         ]
         # fmt: on
-        height, width = self.dimensions
 
         for cell in self.all_cells:
             self._connect_single_cell_2d(cell, offsets)
@@ -154,13 +177,12 @@ class OrthogonalVonNeumannGrid(Grid[T]):
                     ( 1, 0),
         ]
         # fmt: on
-        height, width = self.dimensions
 
         for cell in self.all_cells:
             self._connect_single_cell_2d(cell, offsets)
 
     def _connect_cells_nd(self) -> None:
-        offsets = []
+        offsets: list[tuple[int, ...]] = []
         dimensions = len(self.dimensions)
         for dim in range(dimensions):
             for delta in [
@@ -176,6 +198,8 @@ class OrthogonalVonNeumannGrid(Grid[T]):
 
 
 class HexGrid(Grid[T]):
+    """A Grid with hexagonal tilling of the space."""
+
     def _connect_cells_2d(self) -> None:
         # fmt: off
         even_offsets = [
