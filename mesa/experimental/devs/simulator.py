@@ -1,19 +1,35 @@
-"""Provides several simulator classes.
+"""Simulator implementations for different time advancement approaches in Mesa.
 
-A Simulator is responsible for executing a simulation model. It controls time advancement and enables event scheduling.
+This module provides simulator classes that control how simulation time advances and how
+events are executed. It supports both discrete-time and continuous-time simulations through
+three main classes:
 
+- Simulator: Base class defining the core simulation control interface
+- ABMSimulator: A simulator for agent-based models that combines fixed time steps with
+  event scheduling. Uses integer time units and automatically schedules model.step()
+- DEVSimulator: A pure discrete event simulator using floating-point time units for
+  continuous time simulation
 
+Key features:
+- Flexible time units (integer or float)
+- Event scheduling using absolute or relative times
+- Priority-based event execution
+- Support for running simulations for specific durations or until specific end times
+
+The simulators enable Mesa models to use traditional time-step based approaches, pure
+event-driven approaches, or hybrid combinations of both.
 """
 
 from __future__ import annotations
 
 import numbers
 from collections.abc import Callable
-from typing import Any
-
-from mesa import Model
+from typing import TYPE_CHECKING, Any
 
 from .eventlist import EventList, Priority, SimulationEvent
+
+if TYPE_CHECKING:
+    from mesa import Model
 
 
 class Simulator:
@@ -57,8 +73,20 @@ class Simulator:
         Args:
             model (Model): The model to simulate
 
+        Raises:
+            Exception if simulator.time is not equal to simulator.starttime
+            Exception if event list is not empty
+
         """
-        self.event_list.clear()
+        if self.time != self.start_time:
+            raise ValueError(
+                "trying to setup model, but current time is not equal to start_time, Has the simulator been reset or freshly initialized?"
+            )
+        if not self.event_list.is_empty():
+            raise ValueError(
+                "trying to setup model, but events have already been scheduled. Call simulator.setup before any scheduling"
+            )
+
         self.model = model
 
     def reset(self):
@@ -68,7 +96,20 @@ class Simulator:
         self.time = self.start_time
 
     def run_until(self, end_time: int | float) -> None:
-        """Run the simulator until the end time."""
+        """Run the simulator until the end time.
+
+        Args:
+            end_time (int | float): The end time for stopping the simulator
+
+        Raises:
+            Exception if simulator.setup() has not yet been called
+
+        """
+        if self.model is None:
+            raise Exception(
+                "simulator has not been setup, call simulator.setup(model) first"
+            )
+
         while True:
             try:
                 event = self.event_list.pop_event()
@@ -84,6 +125,26 @@ class Simulator:
                 self._schedule_event(event)  # reschedule event
                 break
 
+    def run_next_event(self):
+        """Execute the next event.
+
+        Raises:
+            Exception if simulator.setup() has not yet been called
+
+        """
+        if self.model is None:
+            raise Exception(
+                "simulator has not been setup, call simulator.setup(model) first"
+            )
+
+        try:
+            event = self.event_list.pop_event()
+        except IndexError:  # event list is empty
+            return
+        else:
+            self.time = event.time
+            event.execute()
+
     def run_for(self, time_delta: int | float):
         """Run the simulator for the specified time delta.
 
@@ -92,6 +153,7 @@ class Simulator:
                                      plus the time delta
 
         """
+        # fixme, raise initialization error or something like it if model.setup has not been called
         end_time = self.time + time_delta
         self.run_until(end_time)
 
@@ -228,7 +290,7 @@ class ABMSimulator(Simulator):
 
         """
         super().setup(model)
-        self.schedule_event_now(self.model.step, priority=Priority.HIGH)
+        self.schedule_event_next_tick(self.model.step, priority=Priority.HIGH)
 
     def check_time_unit(self, time) -> bool:
         """Check whether the time is of the correct unit.
@@ -277,7 +339,15 @@ class ABMSimulator(Simulator):
         Args:
             end_time (float| int): The end_time delta. The simulator is until the specified end time
 
+        Raises:
+            Exception if simulator.setup() has not yet been called
+
         """
+        if self.model is None:
+            raise Exception(
+                "simulator has not been setup, call simulator.setup(model) first"
+            )
+
         while True:
             try:
                 event = self.event_list.pop_event()
@@ -285,6 +355,8 @@ class ABMSimulator(Simulator):
                 self.time = end_time
                 break
 
+            # fixme: the alternative would be to wrap model.step with an annotation which
+            #  handles this scheduling.
             if event.time <= end_time:
                 self.time = event.time
                 if event.fn() == self.model.step:
@@ -297,17 +369,6 @@ class ABMSimulator(Simulator):
                 self.time = end_time
                 self._schedule_event(event)
                 break
-
-    def run_for(self, time_delta: int):
-        """Run the simulator for the specified time delta.
-
-        Args:
-            time_delta (float| int): The time delta. The simulator is run from the current time to the current time
-                                     plus the time delta
-
-        """
-        end_time = self.time + time_delta - 1
-        self.run_until(end_time)
 
 
 class DEVSimulator(Simulator):

@@ -1,9 +1,6 @@
 """configurations for benchmarks."""
 
-from BoltzmannWealth.boltzmann_wealth import BoltzmannWealth
-from Flocking.flocking import BoidFlockers
-from Schelling.schelling import Schelling
-from WolfSheep.wolf_sheep import WolfSheep
+from mesa.examples import BoidFlockers, BoltzmannWealth, Schelling, WolfSheep
 
 configurations = {
     # Schelling Model Configurations
@@ -38,7 +35,7 @@ configurations = {
             "parameters": {
                 "height": 40,
                 "width": 40,
-                "homophily": 3,
+                "homophily": 0.4,
                 "radius": 1,
                 "density": 0.625,
             },
@@ -50,7 +47,7 @@ configurations = {
             "parameters": {
                 "height": 100,
                 "width": 100,
-                "homophily": 8,
+                "homophily": 1,
                 "radius": 2,
                 "density": 0.8,
             },
@@ -93,14 +90,19 @@ configurations = {
             "seeds": 25,
             "replications": 3,
             "steps": 20,
-            "parameters": {"population": 200, "width": 100, "height": 100, "vision": 5},
+            "parameters": {
+                "population_size": 200,
+                "width": 100,
+                "height": 100,
+                "vision": 5,
+            },
         },
         "large": {
             "seeds": 10,
             "replications": 3,
             "steps": 10,
             "parameters": {
-                "population": 400,
+                "population_size": 400,
                 "width": 150,
                 "height": 150,
                 "vision": 15,

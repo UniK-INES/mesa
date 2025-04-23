@@ -1,71 +1,108 @@
 # noqa: D100
-import contextlib
-import importlib
-import os.path
-import sys
-import unittest
-
-
-def classcase(name):  # noqa: D103
-    return "".join(x.capitalize() for x in name.replace("-", "_").split("_"))
-
-
-@unittest.skip(
-    "Skipping TextExamples, because examples folder was moved. More discussion needed."
+from mesa.examples import (
+    BoidFlockers,
+    BoltzmannWealth,
+    ConwaysGameOfLife,
+    EpsteinCivilViolence,
+    PdGrid,
+    Schelling,
+    SugarscapeG1mt,
+    VirusOnNetwork,
+    WolfSheep,
 )
-class TestExamples(unittest.TestCase):
-    """Test examples' models.
 
-    This creates a model object and iterates it through
-    some steps.  The idea is to get code coverage, rather than to test the
-    details of each example's model.
-    """
 
-    EXAMPLES = os.path.abspath(os.path.join(os.path.dirname(__file__), "../examples"))
+def test_boltzmann_model():  # noqa: D103
+    from mesa.examples.basic.boltzmann_wealth_model import app
 
-    @contextlib.contextmanager
-    def active_example_dir(self, example):
-        """Save and restore sys.path and sys.modules."""
-        old_sys_path = sys.path[:]
-        old_sys_modules = sys.modules.copy()
-        old_cwd = os.getcwd()
-        example_path = os.path.abspath(os.path.join(self.EXAMPLES, example))
-        try:
-            sys.path.insert(0, example_path)
-            os.chdir(example_path)
-            yield
-        finally:
-            os.chdir(old_cwd)
-            added = [m for m in sys.modules if m not in old_sys_modules]
-            for mod in added:
-                del sys.modules[mod]
-            sys.modules.update(old_sys_modules)
-            sys.path[:] = old_sys_path
+    app.page  # noqa: B018
 
-    def test_examples(self):  # noqa: D102
-        for example in os.listdir(self.EXAMPLES):
-            if not os.path.isdir(os.path.join(self.EXAMPLES, example)):
-                continue
-            if hasattr(self, f"test_{example.replace('-', '_')}"):
-                # non-standard example; tested below
-                continue
+    model = BoltzmannWealth(seed=42)
 
-            print(f"testing example {example!r}")
-            with self.active_example_dir(example):
-                try:
-                    # epstein_civil_violence.py at the top level
-                    mod = importlib.import_module("model")
-                    server = importlib.import_module("server")
-                    server.server.render_model()
-                except ImportError:
-                    # <example>/epstein_civil_violence.py
-                    mod = importlib.import_module(f"{example.replace('-', '_')}.model")
-                    server = importlib.import_module(
-                        f"{example.replace('-', '_')}.server"
-                    )
-                    server.server.render_model()
-                model_class = getattr(mod, classcase(example))
-                model = model_class()
-                for _ in range(10):
-                    model.step()
-                self.assertEqual(model.steps, 10)
+    for _i in range(10):
+        model.step()
+
+
+def test_conways_game_model():  # noqa: D103
+    from mesa.examples.basic.conways_game_of_life import app
+
+    app.page  # noqa: B018
+
+    model = ConwaysGameOfLife(seed=42)
+    for _i in range(10):
+        model.step()
+
+
+def test_schelling_model():  # noqa: D103
+    from mesa.examples.basic.schelling import app
+
+    app.page  # noqa: B018
+
+    model = Schelling(seed=42)
+    for _i in range(10):
+        model.step()
+
+
+def test_virus_on_network():  # noqa: D103
+    from mesa.examples.basic.virus_on_network import app
+
+    app.page  # noqa: B018
+
+    model = VirusOnNetwork(seed=42)
+    for _i in range(10):
+        model.step()
+
+
+def test_boid_flockers():  # noqa: D103
+    from mesa.examples.basic.boid_flockers import app
+
+    app.page  # noqa: B018
+
+    model = BoidFlockers(seed=42)
+
+    for _i in range(10):
+        model.step()
+
+
+def test_epstein():  # noqa: D103
+    from mesa.examples.advanced.epstein_civil_violence import app
+
+    app.page  # noqa: B018
+
+    model = EpsteinCivilViolence(seed=42)
+
+    for _i in range(10):
+        model.step()
+
+
+def test_pd_grid():  # noqa: D103
+    from mesa.examples.advanced.pd_grid import app
+
+    app.page  # noqa: B018
+
+    model = PdGrid(seed=42)
+
+    for _i in range(10):
+        model.step()
+
+
+def test_sugarscape_g1mt():  # noqa: D103
+    from mesa.examples.advanced.sugarscape_g1mt import app
+
+    app.page  # noqa: B018
+
+    model = SugarscapeG1mt(seed=42)
+
+    for _i in range(10):
+        model.step()
+
+
+def test_wolf_sheep():  # noqa: D103
+    from mesa.examples.advanced.wolf_sheep import app
+    from mesa.experimental.devs import ABMSimulator
+
+    app.page  # noqa: B018
+
+    simulator = ABMSimulator()
+    WolfSheep(seed=42, simulator=simulator)
+    simulator.run_for(10)

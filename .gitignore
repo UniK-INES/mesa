@@ -1,6 +1,10 @@
 # Benchmarking
 benchmarks/**/*.pickle
 
+# exampledocs
+docs/examples/*
+docs/example.md
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[cod]
@@ -63,6 +67,7 @@ target/
 
 # Jupyter and iPython notebook checkpoints
 *.ipynb_checkpoints
+*.virtual_documents
 
 # Spyder app workspace config file
 .spyderworkspace

@@ -1,9 +1,4 @@
-# Mesa Overview
-Mesa is a modular framework for building, analyzing and visualizing agent-based models.
-
-**Agent-based models** are computer simulations involving multiple entities (the agents) acting and interacting with one another based on their programmed behavior. Agents can be used to represent living cells, animals, individual humans, even entire organizations or abstract entities. Sometimes, we may have an understanding of how the individual components of a system behave, and want to see what system-level behaviors and effects emerge from their interaction. Other times, we may have a good idea of how the system overall behaves, and want to figure out what individual behaviors explain it. Or we may want to see how to get agents to cooperate or compete most effectively. Or we may just want to build a cool toy with colorful little dots moving around.
-
-## Mesa Modules
+## Overview of the MESA library
 
 Mesa is modular, meaning that its modeling, analysis and visualization components are kept separate but intended to work together. The modules are grouped into three categories:
 
@@ -15,7 +10,8 @@ Mesa is modular, meaning that its modeling, analysis and visualization component
 
 Most models consist of one class to represent the model itself and one or more classes for agents. Mesa provides built-in functionality for managing agents and their interactions. These are implemented in Mesa's modeling modules:
 
-- `mesa.Model`, `mesa.Agent`
+- [mesa.model](apis/model)
+- [mesa.agent](apis/agent)
 - [mesa.space](apis/space)
 
 The skeleton of a model might look like this:
@@ -47,16 +43,102 @@ class MyModel(mesa.Model):
         self.agents.shuffle_do("step")
 ```
 
-If you instantiate a model and run it for one step, like so:
+### Spaces in Mesa
+
+Mesa provides several types of spaces where agents can exist and interact:
+
+#### Discrete Spaces
+Mesa implements discrete spaces using a doubly-linked structure where each cell maintains connections to its neighbors. Available variants include:
+
+1. **Grid-based Spaces:**
+   ```python
+   # Create a Von Neumann grid (4 neighbors per cell)
+   grid = mesa.space.OrthogonalVonNeumannGrid((width, height), torus=False)
+
+   # Create a Moore grid (8 neighbors per cell)
+   grid = mesa.space.OrthogonalMooreGrid((width, height), torus=True)
+
+   # Create a hexagonal grid
+   grid = mesa.space.HexGrid((width, height), torus=False)
+   ```
+
+2. **Network Space:**
+   ```python
+   # Create a network-based space
+   network = mesa.space.NetworkGrid(network)
+   ```
+
+3. **Voronoi Space:**
+   ```python
+   # Create an irregular tessellation
+   mesh = mesa.space.VoronoiMesh(points)
+   ```
+
+#### Property Layers
+Discrete spaces support PropertyLayers - efficient numpy-based arrays for storing cell-level properties:
 
 ```python
-model = MyModel(5)
-model.step()
+# Create and use a property layer
+grid.create_property_layer("elevation", default_value=10)
+high_ground = grid.elevation.select_cells(lambda x: x > 50)
 ```
 
-You should see agents 1-5, activated in random order. See the [tutorial](tutorials/intro_tutorial) or API documentation for more detail on how to add model functionality.
+#### Continuous Space
+For models requiring continuous movement:
 
-To bootstrap a new model install mesa and run `mesa startproject`
+```python
+# Create a continuous space
+space = mesa.space.ContinuousSpace(x_max, y_max, torus=True)
+
+# Move an agent to specific coordinates
+space.move_agent(agent, (new_x, new_y))
+```
+
+### Time Advancement and Agent Activation
+
+Mesa supports multiple approaches to advancing time and activating agents:
+
+#### Basic Time Steps
+The simplest approach runs the model for a specified number of steps:
+
+```python
+model = MyModel(seed=42)
+for _ in range(100):
+    model.step()
+```
+
+#### Agent Activation Patterns
+Mesa 3.0 provides flexible agent activation through the AgentSet API:
+
+```python
+# Sequential activation
+model.agents.do("step")
+
+# Random activation
+model.agents.shuffle_do("step")
+
+# Multi-stage activation
+for stage in ["move", "eat", "reproduce"]:
+    model.agents.do(stage)
+
+# Activation by agent type
+for klass in model.agent_types:
+    model.agents_by_type[klass].do("step")
+```
+
+#### Event-Based Scheduling
+Mesa also supports event-based time progression (experimental):
+
+```python
+# Pure event-based
+simulator = mesa.experimental.DiscreteEventSimulator()
+model = MyModel(seed=42, simulator=simulator)
+simulator.schedule_event_relative(some_function, 3.1415)
+
+# Hybrid time-step and event scheduling
+model = MyModel(seed=42, simulator=mesa.experimental.ABMSimulator())
+model.simulator.schedule_event_next_tick(some_function)
+```
 
 ### AgentSet and model.agents
 Mesa 3.0 makes `model.agents` and the AgentSet class central in managing and activating agents.
@@ -158,19 +240,37 @@ results = mesa.batch_run(
     iterations=5,
     max_steps=100,
     data_collection_period=1,
+    number_processes=1  # Change to use multiple CPU cores for parallel execution
 )
 ```
 
 The results are returned as a list of dictionaries, which can be easily converted to a pandas DataFrame for further analysis.
 
 ### Visualization
-Mesa now uses a new browser-based visualization system called SolaraViz. This allows for interactive, customizable visualizations of your models. Here's a basic example of how to set up a visualization:
+Mesa now uses a new browser-based visualization system called SolaraViz. This allows for interactive, customizable visualizations of your models.
+
+Note: SolaraViz is experimental and still in active development in Mesa 3.x. While we attempt to minimize them, there might be API breaking changes in minor releases.
+> **Note:** SolaraViz instantiates new models using `**model_parameters.value`, so all model inputs must be keyword arguments.
+
+Ensure your model's `__init__` method accepts keyword arguments matching the `model_params` keys.
 
 ```python
-from mesa.visualization import SolaraViz, make_space_matplotlib, make_plot_measure
+class MyModel(Model):
+    def __init__(self, n_agents=10, seed=None):
+        super().__init__(seed=seed)
+        # Initialize the model with N agents
+```
+The core functionality for building your own visualizations resides in the [`mesa.visualization`](apis/visualization) namespace.
+
+Here's a basic example of how to set up a visualization:
+
+```python
+from mesa.visualization import SolaraViz, make_space_component, make_plot_component
+
 
 def agent_portrayal(agent):
     return {"color": "blue", "size": 50}
+
 
 model_params = {
     "N": {
@@ -180,14 +280,14 @@ model_params = {
         "min": 10,
         "max": 100,
         "step": 1,
-    }
+   }
 }
 
 page = SolaraViz(
     MyModel,
     [
-        make_space_matplotlib(agent_portrayal),
-        make_plot_measure("mean_age")
+        make_space_component(agent_portrayal),
+        make_plot_component("mean_age")
     ],
     model_params=model_params
 )
@@ -199,19 +299,22 @@ This will create an interactive visualization of your model, including:
 - A plot of a model metric over time
 - A slider to adjust the number of agents
 
-TODO SH
+```{toctree}
+:hidden: true
+:maxdepth: 7
 
-To change the port, set environment variable `PORT=<desired port>` or call `server.launch(port=<desired port>)`.
+Overview <overview>
+Creating Your First Model <tutorials/0_first_model>
+Adding Space <tutorials/1_adding_space>
+Collecting Data <tutorials/2_collecting_data>
+AgentSet <tutorials/3_agentset>
+Basic Visualization <tutorials/4_visualization_basic>
+Dynamic Agent Visualization <tutorials/5_visualization_dynamic_agents>
+Custom Visualization Components <tutorials/6_visualization_custom>
+Parameter Sweeps <tutorials/7_batch_run>
+Comparing Scenarios <tutorials/8_comparing_scenarios>
+Best Practices <best-practices>
 
-To add a path segment to the URL, e.g. to publish the model at `localhost:8521/model`, set environment variable `URLPATH=model`.
-
-
-### Further resources
-To further explore Mesa and its features, we have the following resources available:
-
-#### Tutorials
-- [Introductory Tutorial](tutorials/intro_tutorial): Learn how to create your first Mesa model.
-- [Visualization Tutorial](tutorials/visualization_tutorial.html): Learn how to create interactive visualizations for your models.
 
 #### API documentation
 - [Mesa API reference](apis): Detailed documentation of Mesa's classes and functions.

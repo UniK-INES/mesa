@@ -1,11 +1,12 @@
 # Mesa-INES: Agent-based modeling in Python
 
-| | |
-| --- | --- |
-| CI/CD | [![GitHub Actions build status](https://github.com/projectmesa/mesa/workflows/build/badge.svg)](https://github.com/projectmesa/mesa/actions) [![Coverage status](https://codecov.io/gh/projectmesa/mesa/branch/main/graph/badge.svg)](https://codecov.io/gh/projectmesa/mesa) |
+|         | |
+|---------| --- |
+| CI/CD   | [![GitHub Actions build status](https://github.com/projectmesa/mesa/workflows/build/badge.svg)](https://github.com/projectmesa/mesa/actions) [![Coverage status](https://codecov.io/gh/projectmesa/mesa/branch/main/graph/badge.svg)](https://codecov.io/gh/projectmesa/mesa) |
 | Package | [![PyPI - Version](https://img.shields.io/pypi/v/mesa.svg?logo=pypi&label=PyPI&logoColor=gold)](https://pypi.org/project/Mesa/) [![PyPI - Downloads](https://img.shields.io/pypi/dm/mesa.svg?color=blue&label=Downloads&logo=pypi&logoColor=gold)](https://pypi.org/project/Mesa/) [![PyPI - Python Version](https://img.shields.io/pypi/pyversions/mesa.svg?logo=python&label=Python&logoColor=gold)](https://pypi.org/project/Mesa/) |
-| Meta | [![linting - Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) [![code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) [![Hatch project](https://img.shields.io/badge/%F0%9F%A5%9A-Hatch-4051b5.svg)](https://github.com/pypa/hatch) |
-| Chat | [![chat](https://img.shields.io/matrix/project-mesa:matrix.org?label=chat&logo=Matrix)](https://matrix.to/#/#project-mesa:matrix.org) |
+| Meta    | [![linting - Ruff](https://img.shields.io/endpoint?url=https://raw.githubusercontent.com/astral-sh/ruff/main/assets/badge/v2.json)](https://github.com/astral-sh/ruff) [![code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black) [![Hatch project](https://img.shields.io/badge/%F0%9F%A5%9A-Hatch-4051b5.svg)](https://github.com/pypa/hatch) [![SPEC 0 — Minimum Supported Dependencies](https://img.shields.io/badge/SPEC-0-green?labelColor=%23004811&color=%235CA038)](https://scientific-python.org/specs/spec-0000/) |
+| Chat    | [![chat](https://img.shields.io/matrix/project-mesa:matrix.org?label=chat&logo=Matrix)](https://matrix.to/#/#project-mesa:matrix.org) |
+| Cite    | [![DOI](https://joss.theoj.org/papers/10.21105/joss.07668/status.svg)](https://doi.org/10.21105/joss.07668) |
 
 
 Mesa fork with changes for internal educational purposes.
@@ -17,9 +18,9 @@ interface; and analyze their results using Python's data analysis
 tools. Its goal is to be the Python-based alternative to NetLogo,
 Repast, or MASON.
 
-![A screenshot of the Schelling Model in Mesa](https://raw.githubusercontent.com/projectmesa/mesa/main/docs/images/Mesa_Screenshot.png)
+![A screenshot of the WolfSheep Model in Mesa](https://raw.githubusercontent.com/projectmesa/mesa/main/docs/images/wolf_sheep.png)
 
-*Above: A Mesa implementation of the Schelling segregation model, this
+*Above: A Mesa implementation of the WolfSheep model, this
 can be displayed in browser windows or Jupyter.*
 
 ## Features
@@ -31,27 +32,22 @@ can be displayed in browser windows or Jupyter.*
 
 ## Using Mesa
 
-To install our latest stable release (2.4.x), run:
+To install our latest stable release, run:
 
 ``` bash
 pip install -U mesa
 ```
 
-To install our latest pre-release (3.0.0 alpha), run:
-
-``` bash
-pip install -U --pre mesa
-```
-With Mesa 3.0, we don't install all our dependencies anymore by default.
+Starting with Mesa 3.0, we don't install all our dependencies anymore by default.
 ```bash
 # You can customize the additional dependencies you need, if you want. Available are:
-pip install -U --pre mesa[network,viz]
+pip install -U mesa[network,viz]
 
 # This is equivalent to our recommended dependencies:
-pip install -U --pre mesa[rec]
+pip install -U mesa[rec]
 
 # To install all, including developer, dependencies:
-pip install -U --pre mesa[all]
+pip install -U mesa[all]
 ```
 
 You can also use `pip` to install the latest GitHub version:
@@ -141,4 +137,7 @@ Don't forget to checkout the [Contributors guide](https://github.com/projectmesa
 
 ## Citing Mesa
 
-To cite Mesa in your publication, you can use the [CITATION.bib](https://github.com/projectmesa/mesa/blob/main/CITATION.bib).
+To cite Mesa in your publication, you can refer to our peer-reviewed article in the Journal of Open Source Software (JOSS):
+- ter Hoeven, E., Kwakkel, J., Hess, V., Pike, T., Wang, B., rht, & Kazil, J. (2025). Mesa 3: Agent-based modeling with Python in 2025. Journal of Open Source Software, 10(107), 7668. https://doi.org/10.21105/joss.07668
+
+Our [CITATION.cff](https://github.com/projectmesa/mesa/blob/main/CITATION.cff) can be used to generate APA, BibTeX and other citation formats.

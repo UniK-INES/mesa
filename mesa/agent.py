@@ -21,6 +21,8 @@ from random import Random
 # mypy
 from typing import TYPE_CHECKING, Any, Literal, overload
 
+import numpy as np
+
 if TYPE_CHECKING:
     # We ensure that these are not imported during runtime to prevent cyclic
     # dependency.
@@ -62,12 +64,18 @@ class Agent:
         super().__init__(*args, **kwargs)
 
         self.model: Model = model
-        self.model.register_agent(self)
         self.unique_id: int = next(self._ids[model])
         self.pos: Position | None = None
+        self.model.register_agent(self)
 
     def remove(self) -> None:
-        """Remove and delete the agent from the model."""
+        """Remove and delete the agent from the model.
+
+        Notes:
+            If you need to do additional cleanup when removing an agent by for example removing
+            it from a space, consider extending this method in your own agent class.
+
+        """
         with contextlib.suppress(KeyError):
             self.model.deregister_agent(self)
 
@@ -77,10 +85,63 @@ class Agent:
     def advance(self) -> None:  # noqa: D102
         pass
 
+    @classmethod
+    def create_agents(cls, model: Model, n: int, *args, **kwargs) -> AgentSet[Agent]:
+        """Create N agents.
+
+        Args:
+            model: the model to which the agents belong
+            args: arguments to pass onto agent instances
+                  each arg is either a single object or a sequence of length n
+            n: the number of agents to create
+            kwargs: keyword arguments to pass onto agent instances
+                   each keyword arg is either a single object or a sequence of length n
+
+        Returns:
+            AgentSet containing the agents created.
+
+        """
+
+        class ListLike:
+            """Helper class to make default arguments act as if they are in a list of length N."""
+
+            def __init__(self, value):
+                self.value = value
+
+            def __getitem__(self, i):
+                return self.value
+
+        listlike_args = []
+        for arg in args:
+            if isinstance(arg, (list | np.ndarray | tuple)) and len(arg) == n:
+                listlike_args.append(arg)
+            else:
+                listlike_args.append(ListLike(arg))
+
+        listlike_kwargs = {}
+        for k, v in kwargs.items():
+            if isinstance(v, (list | np.ndarray | tuple)) and len(v) == n:
+                listlike_kwargs[k] = v
+            else:
+                listlike_kwargs[k] = ListLike(v)
+
+        agents = []
+        for i in range(n):
+            instance_args = [arg[i] for arg in listlike_args]
+            instance_kwargs = {k: v[i] for k, v in listlike_kwargs.items()}
+            agent = cls(model, *instance_args, **instance_kwargs)
+            agents.append(agent)
+        return AgentSet(agents, random=model.random)
+
     @property
     def random(self) -> Random:
-        """Return a seeded rng."""
+        """Return a seeded stdlib rng."""
         return self.model.random
+
+    @property
+    def rng(self) -> np.random.Generator:
+        """Return a seeded np.random rng."""
+        return self.model.rng
 
 
 class AgentSet(MutableSet, Sequence):
@@ -97,6 +158,12 @@ class AgentSet(MutableSet, Sequence):
         without preventing garbage collection. It is associated with a specific model instance, enabling
         interactions with the model's environment and other agents.The implementation uses a WeakKeyDictionary to store agents,
         which means that agents not referenced elsewhere in the program may be automatically removed from the AgentSet.
+
+    Notes:
+        A `UserWarning` is issued if `random=None`. You can resolve this warning by explicitly
+        passing a random number generator. In most cases, this will be the seeded random number
+        generator in the model. So, you would do `random=self.random` in a `Model` or `Agent` instance.
+
     """
 
     def __init__(self, agents: Iterable[Agent], random: Random | None = None):
@@ -107,6 +174,11 @@ class AgentSet(MutableSet, Sequence):
             random (Random): the random number generator
         """
         if random is None:
+            warnings.warn(
+                "Random number generator not specified, this can make models non-reproducible. Please pass a random number generator explicitly",
+                UserWarning,
+                stacklevel=2,
+            )
             random = (
                 Random()
             )  # FIXME see issue 1981, how to get the central rng from model
@@ -131,7 +203,6 @@ class AgentSet(MutableSet, Sequence):
         at_most: int | float = float("inf"),
         inplace: bool = False,
         agent_type: type[Agent] | None = None,
-        n: int | None = None,
     ) -> AgentSet:
         """Select a subset of agents from the AgentSet based on a filter function and/or quantity limit.
 
@@ -143,7 +214,6 @@ class AgentSet(MutableSet, Sequence):
               - If a float between 0 and 1, at most that fraction of original the agents are selected.
             inplace (bool, optional): If True, modifies the current AgentSet; otherwise, returns a new AgentSet. Defaults to False.
             agent_type (type[Agent], optional): The class type of the agents to select. Defaults to None, meaning no type filtering is applied.
-            n (int): deprecated, use at_most instead
 
         Returns:
             AgentSet: A new AgentSet containing the selected agents, unless inplace is True, in which case the current AgentSet is updated.
@@ -152,14 +222,6 @@ class AgentSet(MutableSet, Sequence):
             - at_most just return the first n or fraction of agents. To take a random sample, shuffle() beforehand.
             - at_most is an upper limit. When specifying other criteria, the number of agents returned can be smaller.
         """
-        if n is not None:
-            warnings.warn(
-                "The parameter 'n' is deprecated. Use 'at_most' instead.",
-                DeprecationWarning,
-                stacklevel=2,
-            )
-            at_most = n
-
         inf = float("inf")
         if filter_func is None and agent_type is None and at_most == inf:
             return self if inplace else copy.copy(self)
@@ -257,20 +319,6 @@ class AgentSet(MutableSet, Sequence):
         Returns:
             AgentSet | list[Any]: The results of the callable calls if return_results is True, otherwise the AgentSet itself.
         """
-        try:
-            return_results = kwargs.pop("return_results")
-        except KeyError:
-            return_results = False
-        else:
-            warnings.warn(
-                "Using return_results is deprecated. Use AgenSet.do in case of return_results=False, and "
-                "AgentSet.map in case of return_results=True",
-                stacklevel=2,
-            )
-
-        if return_results:
-            return self.map(method, *args, **kwargs)
-
         # we iterate over the actual weakref keys and check if weakref is alive before calling the method
         if isinstance(method, str):
             for agentref in self._agents.keyrefs():
@@ -288,15 +336,17 @@ class AgentSet(MutableSet, Sequence):
 
         It's a fast, optimized version of calling shuffle() followed by do().
         """
-        agents = list(self._agents.keys())
-        self.random.shuffle(agents)
+        weakrefs = list(self._agents.keyrefs())
+        self.random.shuffle(weakrefs)
 
         if isinstance(method, str):
-            for agent in agents:
-                getattr(agent, method)(*args, **kwargs)
+            for ref in weakrefs:
+                if (agent := ref()) is not None:
+                    getattr(agent, method)(*args, **kwargs)
         else:
-            for agent in agents:
-                method(agent, *args, **kwargs)
+            for ref in weakrefs:
+                if (agent := ref()) is not None:
+                    method(agent, *args, **kwargs)
 
         return self
 

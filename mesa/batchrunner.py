@@ -1,4 +1,32 @@
-"""batchrunner for running a factorial experiment design over a model."""
+"""batchrunner for running a factorial experiment design over a model.
+
+To take advantage of parallel execution of experiments, `batch_run` uses
+multiprocessing if ``number_processes`` is larger than 1. It is strongly advised
+to only run in parallel using a normal python file (so don't try to do it in a
+jupyter notebook). This is because Jupyter notebooks have a different execution
+model that can cause issues with Python's multiprocessing module, especially on
+Windows. The main problems include the lack of a traditional __main__ entry
+point, serialization issues, and potential deadlocks.
+
+Moreover, best practice when using multiprocessing is to
+put the code inside an ``if __name__ == '__main__':`` code black as shown below::
+
+    from mesa.batchrunner import batch_run
+
+    params = {"width": 10, "height": 10, "N": range(10, 500, 10)}
+
+    if __name__ == '__main__':
+        results = batch_run(
+            MoneyModel,
+            parameters=params,
+            iterations=5,
+            max_steps=100,
+            number_processes=None,
+            data_collection_period=1,
+            display_progress=True,
+        )
+
+"""
 
 import itertools
 import multiprocessing
@@ -81,7 +109,14 @@ def _make_model_kwargs(
     Parameters
     ----------
     parameters : Mapping[str, Union[Any, Iterable[Any]]]
-        Single or multiple values for each model parameter name
+        Single or multiple values for each model parameter name.
+
+        Allowed values for each parameter:
+        - A single value (e.g., `32`, `"relu"`).
+        - A non-empty iterable (e.g., `[0.01, 0.1]`, `["relu", "sigmoid"]`).
+
+        Not allowed:
+        - Empty lists or empty iterables (e.g., `[]`, `()`, etc.). These should be removed manually.
 
     Returns:
     -------
@@ -93,6 +128,12 @@ def _make_model_kwargs(
         if isinstance(values, str):
             # The values is a single string, so we shouldn't iterate over it.
             all_values = [(param, values)]
+        elif isinstance(values, list | tuple | set) and len(values) == 0:
+            # If it's an empty iterable, raise an error
+            raise ValueError(
+                f"Parameter '{param}' contains an empty iterable, which is not allowed."
+            )
+
         else:
             try:
                 all_values = [(param, value) for value in values]

@@ -24,31 +24,45 @@ See the Visualization Tutorial and example models for more details.
 from __future__ import annotations
 
 import asyncio
-import copy
+import inspect
+import threading
+import time
+import traceback
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Literal
 
 import reacton.core
 import solara
+import solara.lab
 
-import mesa.visualization.components.altair as components_altair
-from mesa.visualization.UserParam import Slider
+import mesa.visualization.components.altair_components as components_altair
+from mesa.experimental.devs.simulator import Simulator
+from mesa.mesa_logging import create_module_logger, function_logger
+from mesa.visualization.command_console import CommandConsole
+from mesa.visualization.user_param import Slider
 from mesa.visualization.utils import force_update, update_counter
 
 if TYPE_CHECKING:
     from mesa.model import Model
 
+_mesa_logger = create_module_logger()
+
 
 @solara.component
+@function_logger(__name__)
 def SolaraViz(
     model: Model | solara.Reactive[Model],
     components: list[reacton.core.Component]
     | list[Callable[[Model], reacton.core.Component]]
     | Literal["default"] = "default",
+    *,
     play_interval: int = 100,
+    render_interval: int = 1,
+    simulator: Simulator | None = None,
     model_params=None,
-    seed: float = 0,
     name: str | None = None,
+    use_threads: bool = False,
+    **console_kwargs,
 ):
     """Solara visualization component.
 
@@ -66,11 +80,20 @@ def SolaraViz(
             Defaults to "default", which uses the default Altair space visualization.
         play_interval (int, optional): Interval for playing the model steps in milliseconds.
             This controls the speed of the model's automatic stepping. Defaults to 100 ms.
+        render_interval (int, optional): Controls how often plots are updated during a simulation,
+            allowing users to skip intermediate steps and update graphs less frequently.
+        use_threads: Flag for indicating whether to utilize multi-threading for model execution.
+            When checked, the model will utilize multiple threads,adjust based on system capabilities.
+        simulator: A simulator that controls the model (optional)
         model_params (dict, optional): Parameters for (re-)instantiating a model.
             Can include user-adjustable parameters and fixed parameters. Defaults to None.
-        seed (int, optional): Seed for the random number generator. This ensures reproducibility
-            of the model's behavior. Defaults to 0.
-        name (str | None, optional): Name of the visualization. Defaults to the models class name.
+        name (str | None, optional): Name of the visualization. Defaults to the model's class name.
+        **console_kwargs (dict, optional): Arguments to pass to the command console.
+            Currently supported arguments:
+            - additional_imports: Dictionary of names to objects to import into the command console.
+                - Example:
+                    >>> console_kwargs = {"additional_imports": {"numpy": np}}
+                    >>> SolaraViz(model, console_kwargs=console_kwargs)
 
     Returns:
         solara.component: A Solara component that renders the visualization interface for the model.
@@ -85,45 +108,91 @@ def SolaraViz(
           model instance is provided, it will be converted to a reactive model using `solara.use_reactive`.
         - The `play_interval` argument controls the speed of the model's automatic stepping. A lower
           value results in faster stepping, while a higher value results in slower stepping.
+        - The `render_interval` argument determines how often plots are updated during simulation. Higher values
+          reduce update frequency, resulting in faster execution.
     """
     if components == "default":
-        components = [components_altair.make_space_altair()]
+        components = [
+            components_altair.make_altair_space(
+                agent_portrayal=None, propertylayer_portrayal=None, post_process=None
+            )
+        ]
+    if model_params is None:
+        model_params = {}
 
     # Convert model to reactive
     if not isinstance(model, solara.Reactive):
         model = solara.use_reactive(model)  # noqa: SH102, RUF100
 
-    def connect_to_model():
-        # Patch the step function to force updates
-        original_step = model.value.step
-
-        def step():
-            original_step()
-            force_update()
-
-        model.value.step = step
-        # Add a trigger to model itself
-        model.value.force_update = force_update
-        force_update()
-
-    solara.use_effect(connect_to_model, [model.value])
-
+    # set up reactive model_parameters shared by ModelCreator and ModelController
+    reactive_model_parameters = solara.use_reactive({})
+    reactive_play_interval = solara.use_reactive(play_interval)
+    reactive_render_interval = solara.use_reactive(render_interval)
+    reactive_use_threads = solara.use_reactive(use_threads)
     with solara.AppBar():
         solara.AppBarTitle(name if name else model.value.__class__.__name__)
+        solara.lab.ThemeToggle()
 
     with solara.Sidebar(), solara.Column():
         with solara.Card("Controls"):
-            ModelController(model, play_interval)
+            solara.SliderInt(
+                label="Play Interval (ms)",
+                value=reactive_play_interval,
+                on_value=lambda v: reactive_play_interval.set(v),
+                min=1,
+                max=500,
+                step=10,
+            )
+            solara.SliderInt(
+                label="Render Interval (steps)",
+                value=reactive_render_interval,
+                on_value=lambda v: reactive_render_interval.set(v),
+                min=1,
+                max=100,
+                step=2,
+            )
+            if reactive_use_threads.value:
+                solara.Text("Increase play interval to avoid skipping plots")
 
-        if model_params is not None:
-            with solara.Card("Model Parameters"):
-                ModelCreator(
+            def set_reactive_use_threads(value):
+                reactive_use_threads.set(value)
+
+            solara.Checkbox(
+                label="Use Threads",
+                value=reactive_use_threads,
+                on_value=set_reactive_use_threads,
+            )
+
+            if not isinstance(simulator, Simulator):
+                ModelController(
                     model,
-                    model_params,
-                    seed=seed,
+                    model_parameters=reactive_model_parameters,
+                    play_interval=reactive_play_interval,
+                    render_interval=reactive_render_interval,
+                    use_threads=reactive_use_threads,
                 )
+            else:
+                SimulatorController(
+                    model,
+                    simulator,
+                    model_parameters=reactive_model_parameters,
+                    play_interval=reactive_play_interval,
+                    render_interval=reactive_render_interval,
+                    use_threads=reactive_use_threads,
+                )
+        with solara.Card("Model Parameters"):
+            ModelCreator(
+                model, model_params, model_parameters=reactive_model_parameters
+            )
         with solara.Card("Information"):
             ShowSteps(model.value)
+        if (
+            CommandConsole in components
+        ):  # If command console in components show it in sidebar
+            components.remove(CommandConsole)
+            additional_imports = console_kwargs.get("additional_imports", {})
+            with solara.Card("Command Console"):
+                CommandConsole(model.value, additional_imports=additional_imports)
 
     ComponentsView(components, model.value)
 
@@ -172,44 +241,218 @@ JupyterViz = SolaraViz
 
 
 @solara.component
-def ModelController(model: solara.Reactive[Model], play_interval=100):
+def ModelController(
+    model: solara.Reactive[Model],
+    *,
+    model_parameters: dict | solara.Reactive[dict] = None,
+    play_interval: int | solara.Reactive[int] = 100,
+    render_interval: int | solara.Reactive[int] = 1,
+    use_threads: bool | solara.Reactive[bool] = False,
+):
     """Create controls for model execution (step, play, pause, reset).
 
     Args:
-        model (solara.Reactive[Model]): Reactive model instance
-        play_interval (int, optional): Interval for playing the model steps in milliseconds.
+        model: Reactive model instance
+        model_parameters: Reactive parameters for (re-)instantiating a model.
+        play_interval: Interval for playing the model steps in milliseconds.
+        render_interval: Controls how often the plots are updated during simulation steps.Higher value reduce update frequency.
+        use_threads: Flag for indicating whether to utilize multi-threading for model execution.
     """
     playing = solara.use_reactive(False)
     running = solara.use_reactive(True)
-    original_model = solara.use_reactive(None)
 
-    def save_initial_model():
-        """Save the initial model for comparison."""
-        original_model.set(copy.deepcopy(model.value))
+    if model_parameters is None:
+        model_parameters = {}
+    model_parameters = solara.use_reactive(model_parameters)
+    visualization_pause_event = solara.use_memo(lambda: threading.Event(), [])
+
+    error_message = solara.use_reactive(None)
+
+    def step():
+        try:
+            while running.value and playing.value:
+                time.sleep(play_interval.value / 1000)
+                do_step()
+                if use_threads.value:
+                    visualization_pause_event.set()
+        except Exception as e:
+            error_message.value = f"error in step: {e}"
+            traceback.print_exc()
+            return
+
+    def visualization_task():
+        if use_threads.value:
+            try:
+                while playing.value and running.value:
+                    visualization_pause_event.wait()
+                    visualization_pause_event.clear()
+                    force_update()
+
+            except Exception as e:
+                error_message.value = f"error in visualization: {e}"
+                traceback.print_exc()
+
+    solara.lab.use_task(
+        step, dependencies=[playing.value, running.value], prefer_threaded=True
+    )
+
+    solara.use_thread(
+        visualization_task,
+        dependencies=[playing.value, running.value],
+    )
+
+    @function_logger(__name__)
+    def do_step():
+        """Advance the model by the number of steps specified by the render_interval slider."""
+        if playing.value:
+            for _ in range(render_interval.value):
+                model.value.step()
+                running.value = model.value.running
+                if not playing.value:
+                    break
+            if not use_threads.value:
+                force_update()
+
+        else:
+            for _ in range(render_interval.value):
+                model.value.step()
+                running.value = model.value.running
+            force_update()
+
+    @function_logger(__name__)
+    def do_reset():
+        """Reset the model to its initial state."""
+        error_message.set(None)
         playing.value = False
-        force_update()
+        running.value = True
+        visualization_pause_event.clear()
+        _mesa_logger.log(
+            10,
+            f"creating new {model.value.__class__} instance with {model_parameters.value}",
+        )
+        model.value = model.value = model.value.__class__(**model_parameters.value)
 
-    solara.use_effect(save_initial_model, [model.value])
+    @function_logger(__name__)
+    def do_play_pause():
+        """Toggle play/pause."""
+        playing.value = not playing.value
 
-    async def step():
-        while playing.value and running.value:
-            await asyncio.sleep(play_interval / 1000)
-            do_step()
+    with solara.Row(justify="space-between"):
+        solara.Button(label="Reset", color="primary", on_click=do_reset)
+        solara.Button(
+            label="▶" if not playing.value else "❚❚",
+            color="primary",
+            on_click=do_play_pause,
+            disabled=not running.value,
+        )
+        solara.Button(
+            label="Step",
+            color="primary",
+            on_click=do_step,
+            disabled=playing.value or not running.value,
+        )
+
+    if error_message.value:
+        solara.Error(label=error_message.value)
+
+
+@solara.component
+def SimulatorController(
+    model: solara.Reactive[Model],
+    simulator,
+    *,
+    model_parameters: dict | solara.Reactive[dict] = None,
+    play_interval: int | solara.Reactive[int] = 100,
+    render_interval: int | solara.Reactive[int] = 1,
+    use_threads: bool | solara.Reactive[bool] = False,
+):
+    """Create controls for model execution (step, play, pause, reset).
+
+    Args:
+        model: Reactive model instance
+        simulator: Simulator instance
+        model_parameters: Reactive parameters for (re-)instantiating a model.
+        play_interval: Interval for playing the model steps in milliseconds.
+        render_interval: Controls how often the plots are updated during simulation steps.Higher values reduce update frequency.
+        use_threads: Flag for indicating whether to utilize multi-threading for model execution.
+
+    Notes:
+        The `step button` increments the step by the value specified in the `render_interval` slider.
+        This behavior ensures synchronization between simulation steps and plot updates.
+    """
+    playing = solara.use_reactive(False)
+    running = solara.use_reactive(True)
+    if model_parameters is None:
+        model_parameters = {}
+    model_parameters = solara.use_reactive(model_parameters)
+    visualization_pause_event = solara.use_memo(lambda: threading.Event(), [])
+    pause_step_event = solara.use_memo(lambda: threading.Event(), [])
+
+    error_message = solara.use_reactive(None)
+
+    def step():
+        try:
+            while running.value and playing.value:
+                time.sleep(play_interval.value / 1000)
+                if use_threads.value:
+                    pause_step_event.wait()
+                    pause_step_event.clear()
+                do_step()
+                if use_threads.value:
+                    visualization_pause_event.set()
+        except Exception as e:
+            error_message.value = f"error in step: {e}"
+            traceback.print_exc()
+
+    def visualization_task():
+        if use_threads.value:
+            try:
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                pause_step_event.set()
+                while playing.value and running.value:
+                    visualization_pause_event.wait()
+                    visualization_pause_event.clear()
+                    force_update()
+                    pause_step_event.set()
+            except Exception as e:
+                error_message.value = f"error in visualization: {e}"
+                traceback.print_exc()
+                return
 
     solara.lab.use_task(
         step, dependencies=[playing.value, running.value], prefer_threaded=False
     )
+    solara.lab.use_task(visualization_task, dependencies=[playing.value])
 
     def do_step():
-        """Advance the model by one step."""
-        model.value.step()
-        running.value = model.value.running
+        """Advance the model by the number of steps specified by the render_interval slider."""
+        if playing.value:
+            for _ in range(render_interval.value):
+                simulator.run_for(1)
+                running.value = model.value.running
+                if not playing.value:
+                    break
+            if not use_threads.value:
+                force_update()
+
+        else:
+            for _ in range(render_interval.value):
+                simulator.run_for(1)
+                running.value = model.value.running
+            force_update()
 
     def do_reset():
         """Reset the model to its initial state."""
+        error_message.set(None)
         playing.value = False
         running.value = True
-        model.value = copy.deepcopy(original_model.value)
+        simulator.reset()
+        visualization_pause_event.clear()
+        pause_step_event.clear()
+        model.value = model.value = model.value.__class__(
+            simulator=simulator, **model_parameters.value
+        )
 
     def do_play_pause():
         """Toggle play/pause."""
@@ -229,6 +472,8 @@ def ModelController(model: solara.Reactive[Model], play_interval=100):
             on_click=do_step,
             disabled=playing.value or not running.value,
         )
+    if error_message.value:
+        solara.Error(label=error_message.value)
 
 
 def split_model_params(model_params):
@@ -268,7 +513,12 @@ def check_param_is_fixed(param):
 
 
 @solara.component
-def ModelCreator(model, model_params, seed=1):
+def ModelCreator(
+    model: solara.Reactive[Model],
+    user_params: dict,
+    *,
+    model_parameters: dict | solara.Reactive[dict] = None,
+):
     """Solara component for creating and managing a model instance with user-defined parameters.
 
     This component allows users to create a model instance with specified parameters and seed.
@@ -276,9 +526,9 @@ def ModelCreator(model, model_params, seed=1):
     number generator.
 
     Args:
-        model (solara.Reactive[Model]): A reactive model instance. This is the main model to be created and managed.
-        model_params (dict): Dictionary of model parameters. This includes both user-adjustable parameters and fixed parameters.
-        seed (int, optional): Initial seed for the random number generator. Defaults to 1.
+        model: A reactive model instance. This is the main model to be created and managed.
+        user_params: Parameters for (re-)instantiating a model. Can include user-adjustable parameters and fixed parameters. Defaults to None.
+        model_parameters: reactive parameters for reinitializing the model
 
     Returns:
         solara.component: A Solara component that renders the model creation and management interface.
@@ -297,42 +547,69 @@ def ModelCreator(model, model_params, seed=1):
           or are dictionaries containing parameter details such as type, value, min, and max.
         - The `seed` argument ensures reproducibility by setting the initial seed for the model's random number generator.
         - The component provides an interface for adjusting user-defined parameters and reseeding the model.
-
     """
-    user_params, fixed_params = split_model_params(model_params)
+    if model_parameters is None:
+        model_parameters = {}
+    model_parameters = solara.use_reactive(model_parameters)
 
-    reactive_seed = solara.use_reactive(seed)
+    solara.use_effect(
+        lambda: _check_model_params(model.value.__class__.__init__, fixed_params),
+        [model.value],
+    )
+    user_params, fixed_params = split_model_params(user_params)
 
-    model_parameters, set_model_parameters = solara.use_state(
-        {
-            **fixed_params,
-            **{k: v.get("value") for k, v in user_params.items()},
-        }
+    # Use solara.use_effect to run the initialization code only once
+    solara.use_effect(
+        # set model_parameters to the default values for all parameters
+        lambda: model_parameters.set(
+            {
+                **fixed_params,
+                **{k: v.get("value") for k, v in user_params.items()},
+            }
+        ),
+        [],
     )
 
-    def do_reseed():
-        """Update the random seed for the model."""
-        reactive_seed.value = model.value.random.random()
-
+    @function_logger(__name__)
     def on_change(name, value):
-        set_model_parameters({**model_parameters, name: value})
-
-    def create_model():
-        model.value = model.value.__class__(**model_parameters)
-        model.value._seed = reactive_seed.value
-
-    solara.use_effect(create_model, [model_parameters, reactive_seed.value])
-
-    with solara.Row(justify="space-between"):
-        solara.InputText(
-            label="Seed",
-            value=reactive_seed,
-            continuous_update=True,
-        )
-
-        solara.Button(label="Reseed", color="primary", on_click=do_reseed)
+        model_parameters.value = {**model_parameters.value, name: value}
 
     UserInputs(user_params, on_change=on_change)
+
+
+def _check_model_params(init_func, model_params):
+    """Check if model parameters are valid for the model's initialization function.
+
+    Args:
+        init_func: Model initialization function
+        model_params: Dictionary of model parameters
+
+    Raises:
+        ValueError: If a parameter is not valid for the model's initialization function
+    """
+    model_parameters = inspect.signature(init_func).parameters
+
+    has_var_positional = any(
+        param.kind == inspect.Parameter.VAR_POSITIONAL
+        for param in model_parameters.values()
+    )
+
+    if has_var_positional:
+        raise ValueError(
+            "Mesa's visualization requires the use of keyword arguments to ensure the parameters are passed to Solara correctly. Please ensure all model parameters are of form param=value"
+        )
+
+    for name in model_parameters:
+        if (
+            model_parameters[name].default == inspect.Parameter.empty
+            and name not in model_params
+            and name != "self"
+            and name != "kwargs"
+        ):
+            raise ValueError(f"Missing required model parameter: {name}")
+    for name in model_params:
+        if name not in model_parameters and "kwargs" not in model_parameters:
+            raise ValueError(f"Invalid model parameter: {name}")
 
 
 @solara.component
@@ -395,6 +672,12 @@ def UserInputs(user_params, on_change=None):
             )
         elif input_type == "Checkbox":
             solara.Checkbox(
+                label=label,
+                on_value=change_handler,
+                value=options.get("value"),
+            )
+        elif input_type == "InputText":
+            solara.InputText(
                 label=label,
                 on_value=change_handler,
                 value=options.get("value"),

@@ -3,13 +3,21 @@
 import unittest
 
 import ipyvuetify as vw
+import pytest
 import solara
 
 import mesa
-import mesa.visualization.components.altair
-import mesa.visualization.components.matplotlib
-from mesa.visualization.components.matplotlib import make_space_matplotlib
-from mesa.visualization.solara_viz import Slider, SolaraViz, UserInputs
+import mesa.visualization.components.altair_components
+import mesa.visualization.components.matplotlib_components
+from mesa.space import MultiGrid, PropertyLayer
+from mesa.visualization.components.altair_components import make_altair_space
+from mesa.visualization.components.matplotlib_components import make_mpl_space_component
+from mesa.visualization.solara_viz import (
+    Slider,
+    SolaraViz,
+    UserInputs,
+    _check_model_params,
+)
 
 
 class TestMakeUserInput(unittest.TestCase):  # noqa: D101
@@ -88,25 +96,49 @@ class TestMakeUserInput(unittest.TestCase):  # noqa: D101
 
 def test_call_space_drawer(mocker):  # noqa: D103
     mock_space_matplotlib = mocker.spy(
-        mesa.visualization.components.matplotlib, "SpaceMatplotlib"
+        mesa.visualization.components.matplotlib_components, "SpaceMatplotlib"
     )
 
-    mock_space_altair = mocker.spy(mesa.visualization.components.altair, "SpaceAltair")
+    mock_space_altair = mocker.spy(
+        mesa.visualization.components.altair_components, "SpaceAltair"
+    )
+    mock_chart_property_layer = mocker.spy(
+        mesa.visualization.components.altair_components, "chart_property_layers"
+    )
 
-    model = mesa.Model()
-    mocker.patch.object(mesa.Model, "__init__", return_value=None)
+    class MockAgent(mesa.Agent):
+        def __init__(self, model):
+            super().__init__(model)
 
-    agent_portrayal = {
-        "Shape": "circle",
-        "color": "gray",
-    }
+    class MockModel(mesa.Model):
+        def __init__(self, seed=None):
+            super().__init__(seed=seed)
+            layer1 = PropertyLayer(
+                name="sugar", width=10, height=10, default_value=10.0
+            )
+            self.grid = MultiGrid(
+                width=10, height=10, torus=True, property_layers=layer1
+            )
+            a = MockAgent(self)
+            self.grid.place_agent(a, (5, 5))
+
+    model = MockModel()
+
+    def agent_portrayal(agent):
+        return {"marker": "o", "color": "gray"}
+
     propertylayer_portrayal = None
     # initialize with space drawer unspecified (use default)
     # component must be rendered for code to run
-    solara.render(SolaraViz(model, components=[make_space_matplotlib(agent_portrayal)]))
+    solara.render(
+        SolaraViz(
+            model,
+            components=[make_mpl_space_component(agent_portrayal)],
+        )
+    )
     # should call default method with class instance and agent portrayal
     mock_space_matplotlib.assert_called_with(
-        model, agent_portrayal, propertylayer_portrayal
+        model, agent_portrayal, propertylayer_portrayal, post_process=None
     )
 
     # specify no space should be drawn
@@ -114,7 +146,46 @@ def test_call_space_drawer(mocker):  # noqa: D103
     solara.render(SolaraViz(model))
     # should call default method with class instance and agent portrayal
     assert mock_space_matplotlib.call_count == 0
-    assert mock_space_altair.call_count > 0
+    assert mock_space_altair.call_count == 1  # altair is the default method
+
+    # checking if SpaceAltair is working as intended with post_process
+    propertylayer_portrayal = {
+        "sugar": {
+            "colormap": "pastel1",
+            "alpha": 0.75,
+            "colorbar": True,
+            "vmin": 0,
+            "vmax": 10,
+        }
+    }
+    mock_post_process = mocker.MagicMock()
+    solara.render(
+        SolaraViz(
+            model,
+            components=[
+                make_altair_space(
+                    agent_portrayal,
+                    post_process=mock_post_process,
+                    propertylayer_portrayal=propertylayer_portrayal,
+                )
+            ],
+        )
+    )
+
+    args, kwargs = mock_space_altair.call_args
+    assert args == (model, agent_portrayal)
+    assert kwargs == {
+        "post_process": mock_post_process,
+        "propertylayer_portrayal": propertylayer_portrayal,
+    }
+    mock_post_process.assert_called_once()
+    assert mock_chart_property_layer.call_count == 1
+    assert mock_space_matplotlib.call_count == 0
+
+    mock_space_altair.reset_mock()
+    mock_space_matplotlib.reset_mock()
+    mock_post_process.reset_mock()
+    mock_chart_property_layer.reset_mock()
 
     # specify a custom space method
     class AltSpace:
@@ -128,11 +199,11 @@ def test_call_space_drawer(mocker):  # noqa: D103
 
     # check voronoi space drawer
     voronoi_model = mesa.Model()
-    voronoi_model.grid = mesa.experimental.cell_space.VoronoiGrid(
+    voronoi_model.grid = mesa.discrete_space.VoronoiGrid(
         centroids_coordinates=[(0, 1), (0, 0), (1, 0)],
     )
     solara.render(
-        SolaraViz(voronoi_model, components=[make_space_matplotlib(agent_portrayal)])
+        SolaraViz(voronoi_model, components=[make_mpl_space_component(agent_portrayal)])
     )
 
 
@@ -148,3 +219,68 @@ def test_slider():  # noqa: D103
     assert not slider_int.is_float_slider
     slider_dtype_float = Slider("Homophily", 3, 0, 8, 1, dtype=float)
     assert slider_dtype_float.is_float_slider
+
+
+def test_model_param_checks():  # noqa: D103
+    class ModelWithOptionalParams:
+        def __init__(self, required_param, optional_param=10):
+            pass
+
+    class ModelWithOnlyRequired:
+        def __init__(self, param1, param2):
+            pass
+
+    class ModelWithKwargs:
+        def __init__(self, **kwargs):
+            pass
+
+    # Test that optional params can be omitted
+    _check_model_params(ModelWithOptionalParams.__init__, {"required_param": 1})
+
+    # Test that optional params can be provided
+    _check_model_params(
+        ModelWithOptionalParams.__init__, {"required_param": 1, "optional_param": 5}
+    )
+
+    # Test that model_params are accepted if model uses **kwargs
+    _check_model_params(ModelWithKwargs.__init__, {"another_kwarg": 6})
+
+    # test hat kwargs are accepted even if no model_params are specified
+    _check_model_params(ModelWithKwargs.__init__, {})
+
+    # Test invalid parameter name raises ValueError
+    with pytest.raises(ValueError, match="Invalid model parameter: invalid_param"):
+        _check_model_params(
+            ModelWithOptionalParams.__init__, {"required_param": 1, "invalid_param": 2}
+        )
+
+    # Test missing required parameter raises ValueError
+    with pytest.raises(ValueError, match="Missing required model parameter: param2"):
+        _check_model_params(ModelWithOnlyRequired.__init__, {"param1": 1})
+
+    # Test passing extra parameters raises ValueError
+    with pytest.raises(ValueError, match="Invalid model parameter: extra"):
+        _check_model_params(
+            ModelWithOnlyRequired.__init__, {"param1": 1, "param2": 2, "extra": 3}
+        )
+
+    # Test empty params dict raises ValueError if required params
+    with pytest.raises(ValueError, match="Missing required model parameter"):
+        _check_model_params(ModelWithOnlyRequired.__init__, {})
+
+
+# test that _check_model_params raises ValueError when *args are present
+def test_check_model_params_with_args_only():
+    """Test that _check_model_params raises ValueError when *args are present."""
+
+    class ModelWithArgsOnly:
+        def __init__(self, param1, *args):
+            pass
+
+    model_params = {"param1": 1}
+
+    with pytest.raises(
+        ValueError,
+        match="Mesa's visualization requires the use of keyword arguments to ensure the parameters are passed to Solara correctly. Please ensure all model parameters are of form param=value",
+    ):
+        _check_model_params(ModelWithArgsOnly.__init__, model_params)

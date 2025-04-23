@@ -1,13 +1,20 @@
-"""Experimental init."""
+"""Experimental features package for Mesa.
 
-from mesa.experimental import cell_space
+This package contains modules that are under active development and testing. These
+features are provided to allow early access and feedback from the Mesa community, but
+their APIs may change between releases without following semantic versioning.
 
-try:
-    from .solara_viz import JupyterViz, Slider, SolaraViz, make_text
+Current experimental modules:
+    cell_space: Alternative API for discrete spaces with cell-centric functionality
+    devs: Discrete event simulation system for scheduling events at arbitrary times
+    mesa_signals: Reactive programming capabilities for tracking state changes
 
-    __all__ = ["cell_space", "JupyterViz", "Slider", "SolaraViz", "make_text"]
-except ImportError:
-    print(
-        "Could not import SolaraViz. If you need it, install with 'pip install --pre mesa[viz]'"
-    )
-    __all__ = ["cell_space"]
+Notes:
+    - Features in this package may be changed or removed without notice
+    - APIs are not guaranteed to be stable between releases
+    - Features graduate from experimental status once their APIs are stabilized
+"""
+
+from mesa.experimental import continuous_space, devs, mesa_signals
+
+__all__ = ["continuous_space", "devs", "mesa_signals"]

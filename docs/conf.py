@@ -1,4 +1,3 @@
-# noqa: D100
 #!/usr/bin/env python3
 #
 # Mesa documentation build configuration file, created by
@@ -14,14 +13,17 @@
 # serve to show the default.
 
 import os
+import os.path as osp
+import pathlib
+import string
 import sys
 from datetime import date
 
 # If extensions (or modules to document with autodoc) are in another directory,
 # add these directories to sys.path here. If the directory is relative to the
 # documentation root, use os.path.abspath to make it absolute, like shown here.
+HERE = osp.abspath(osp.dirname(__file__))
 sys.path.insert(0, os.path.abspath("."))
-sys.path.insert(0, "../examples")
 sys.path.insert(0, "../mesa")
 
 
@@ -44,6 +46,7 @@ extensions = [
     "sphinx.ext.viewcode",
     "sphinx.ext.napoleon",  # for google style docstrings
     "myst_nb",  # For Markdown and Jupyter notebooks
+    "sphinx_copybutton",  # For copying the code in the documentation
 ]
 
 # Add any paths that contain templates here, relative to this directory.
@@ -127,11 +130,7 @@ html_theme = "pydata_sphinx_theme"
 # further.  For a list of options available for each theme, see the
 # documentation.
 html_theme_options = {
-    "navbar_start": ["navbar-logo", "version-switcher"],  # Show switcher in navbar
-    "switcher": {
-        "json_url": "https://mesa.readthedocs.io/latest/_static/switcher.json",  # URL of your switcher.json file
-        "version_match": version  # Automatically matches the current version
-    }
+    "navbar_start": ["navbar-logo"],
 }
 
 # Add any paths that contain custom themes here, relative to this directory.
@@ -172,7 +171,9 @@ html_static_path = ["_static"]
 # html_use_smartypants = True
 
 # Custom sidebar templates, maps document names to template names.
-# html_sidebars = {}
+html_sidebars = {
+    "migration_guide": [],  # No sidebar migration
+}
 
 # Additional templates that should be rendered to pages, maps page names to
 # template names.
@@ -289,3 +290,106 @@ texinfo_documents = [
 
 # Example configuration for intersphinx: refer to the Python standard library.
 intersphinx_mapping = {"python": ("https://docs.python.org/3", None)}
+
+
+def write_example_md_file(
+    agent_filename, model_filename, readme_filename, app_filename, md_filepath, template
+):
+    with open(agent_filename) as content_file:
+        agent_file = content_file.read()
+    with open(model_filename) as content_file:
+        model_file = content_file.read()
+    with open(readme_filename) as content_file:
+        readme_file = content_file.read()
+    with open(app_filename) as content_file:
+        app_file = content_file.read()
+
+    with open(md_filepath, "w") as fh:
+        content = template.substitute(
+            dict(
+                agent_file=agent_file,
+                model_file=model_file,
+                readme_file=readme_file,
+                app_file=app_file,
+            )
+        )
+        fh.write(content)
+
+
+def setup_examples_pages():
+    # create md files for all examples
+    # check what examples exist
+    examples_folder = osp.abspath(osp.join(HERE, "..", "mesa", "examples"))
+    basic_examples = [
+        ("basic", f.path)
+        for f in os.scandir(osp.join(examples_folder, "basic"))
+        if f.is_dir() and not f.name.startswith("__")
+    ]
+    advanced_examples = [
+        ("advanced", f.path)
+        for f in os.scandir(osp.join(examples_folder, "advanced"))
+        if f.is_dir() and not f.name.startswith("__")
+    ]
+    examples = basic_examples + advanced_examples
+
+    with open(os.path.join(HERE, "example_template.txt")) as fh:
+        template = string.Template(fh.read())
+
+    root_folder = pathlib.Path(os.path.join(HERE, "examples"))
+    root_folder.mkdir(parents=True, exist_ok=True)
+    pathlib.Path(os.path.join(root_folder, "basic")).mkdir(parents=True, exist_ok=True)
+    pathlib.Path(os.path.join(root_folder, "advanced")).mkdir(
+        parents=True, exist_ok=True
+    )
+
+    examples_md = []
+    for kind, example in examples:
+        base_name = os.path.basename(os.path.normpath(example))
+
+        agent_filename = os.path.join(example, "agents.py")
+        model_filename = os.path.join(example, "model.py")
+        readme_filename = os.path.join(example, "Readme.md")
+        app_filename = os.path.join(example, "app.py")
+
+        md_filename = f"{base_name}.md"
+        examples_md.append((base_name, f"{kind}/{base_name}"))
+
+        md_filepath = os.path.join(HERE, "examples", kind, md_filename)
+        write_example_md_file(
+            agent_filename,
+            model_filename,
+            readme_filename,
+            app_filename,
+            md_filepath,
+            template,
+        )
+
+    # create overview of examples.md
+    with open(os.path.join(HERE, "examples_overview_template.txt")) as fh:
+        template = string.Template(fh.read())
+
+    with open(os.path.join(examples_folder, "README.md")) as fh:
+        readme_md = fh.read()
+
+    with open(os.path.join(HERE, "examples.md"), "w") as fh:
+        content = template.substitute(
+            dict(
+                readme=readme_md,
+                example_paths="\n".join(
+                    [
+                        f"{' '.join(a.split('_'))} </examples/{b}>"
+                        for a, b in examples_md
+                    ]
+                ),
+            )
+        )
+        fh.write(content)
+
+
+def setup(app):
+    setup_examples_pages()
+
+
+#
+if __name__ == "__main__":
+    setup_examples_pages()

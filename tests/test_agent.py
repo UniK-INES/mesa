@@ -162,6 +162,38 @@ def test_agent_membership():
     assert AgentTest(model) not in agentset
 
 
+def test_agent_rng():
+    """Test whether agent.random and agent.rng are equal to model.random and model.rng."""
+    model = Model(seed=42)
+    agent = Agent(model)
+    assert agent.random is model.random
+    assert agent.rng is model.rng
+
+
+def test_agent_create():
+    """Test create agent factory method."""
+
+    class TestAgent(Agent):
+        def __init__(self, model, attr, def_attr, a=0, b=0):
+            super().__init__(model)
+            self.some_attribute = attr
+            self.some_default_value = def_attr
+            self.a = a
+            self.b = b
+
+    model = Model(seed=42)
+    n = 10
+    some_attribute = model.rng.random(n)
+    a = tuple([model.random.random() for _ in range(n)])
+    TestAgent.create_agents(model, n, some_attribute, 5, a=a, b=7)
+
+    for agent, value, a_i in zip(model.agents, some_attribute, a):
+        assert agent.some_attribute == value
+        assert agent.some_default_value == 5
+        assert agent.a == a_i
+        assert agent.b == 7
+
+
 def test_agent_add_remove_discard():
     """Test adding, removing and discarding agents from AgentSet."""
     model = Model()
@@ -468,9 +500,32 @@ def test_agentset_shuffle_do():
     original_order = list(agentset)
     shuffled_order = []
     agentset.shuffle_do(lambda agent: shuffled_order.append(agent))
-    assert (
-        original_order != shuffled_order
-    ), "The order should be different after shuffle_do"
+    assert original_order != shuffled_order, (
+        "The order should be different after shuffle_do"
+    )
+
+    class AgentWithRemove(Agent):
+        def __init__(self, model):
+            super().__init__(model)
+            self.is_alive = True
+
+        def remove(self):
+            super().remove()
+            self.is_alive = False
+
+        def step(self):
+            if not self.is_alive:
+                raise Exception
+
+            agent_to_remove = self.random.choice(self.model.agents)
+
+            if agent_to_remove is not self:
+                agent_to_remove.remove()
+
+    model = Model(seed=32)
+    for _ in range(100):
+        AgentWithRemove(model)
+    model.agents.shuffle_do("step")
 
 
 def test_agentset_get_attribute():
