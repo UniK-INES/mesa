@@ -676,7 +676,10 @@ def _scatter(ax: Axes, arguments, **kwargs):
     ax.get_figure().canvas.draw()
     for mark in set(marker):
         mark_mask = [m == mark for m in list(marker)]
-        mark_png = [os.path.isfile(m) for m in list(marker)]
+        mark_png = [
+            isinstance(m, [str, os.PathLike]) and os.path.isfile(m)
+            for m in list(marker)
+        ]
         for z_order in np.unique(zorder):
             zorder_mask = z_order == zorder
             logical_mark = mark_mask & zorder_mask & [not m for m in mark_png]
