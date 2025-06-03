@@ -46,8 +46,8 @@ dynamic = ["version"]
 
 [project.optional-dependencies]
 # User collections
-rec = ["mesa-ines[network,viz]"]
-all = ["mesa-ines[network,viz,dev,examples,docs]"]
+rec = ["mesa[network,viz]"]
+all = ["mesa[network,viz,dev,examples,docs]"]
 # Core dependencies
 network = [
   "networkx",
@@ -59,7 +59,7 @@ viz = [
 ]
 # Dev and CI stuff
 dev = [
-  "mesa-ines[rec]",
+  "mesa[rec]",
   "ruff",
   "pytest",
   "pytest-cov",
@@ -71,12 +71,12 @@ dev = [
   "ipython>=9.2.0",
 ]
 examples = [
-  "mesa-ines[rec]",
+  "mesa[rec]",
   "pytest",
   "scipy",
 ]
 docs = [
-  "mesa-ines[rec]",
+  "mesa[rec]",
   "sphinx",
   "ipython",
   "pydata_sphinx_theme",
