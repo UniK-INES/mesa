@@ -1513,7 +1513,7 @@ class NetworkGrid:
             g: a NetworkX graph instance.
         """
         self.G = g
-        self.agents = {}
+        self.agents_node_ids = {}
 
         for node_id in self.G.nodes:
             g.nodes[node_id]["agent"] = self.default_val()
@@ -1547,7 +1547,7 @@ class NetworkGrid:
     def place_agent(self, agent: Agent, node_id: int) -> None:
         """Place an agent in a node."""
         self.G.nodes[node_id]["agent"].append(agent)
-        self.agents[agent] = node_id
+        self.agents_node_ids[agent] = node_id
 
     def get_neighborhood(
         self, node_id: int, include_center: bool = False, radius: int = 1
@@ -1588,7 +1588,7 @@ class NetworkGrid:
         Returns:
             list of agents in neighborhood.
         """
-        node_id = self.agents[agent]
+        node_id = self.agents_node_ids[agent]
         neighborhood = self.get_neighborhood(node_id, include_center, radius)
         return self.get_cell_list_contents(neighborhood)
 
@@ -1610,10 +1610,10 @@ class NetworkGrid:
             agent: agent instance
 
         """
-        node_id = self.agents[agent]
+        node_id = self.agents_node_ids[agent]
 
         self.G.nodes[node_id]["agent"].remove(agent)
-        self.agents[agent] = None
+        self.agents_node_ids[agent] = None
 
     def is_cell_empty(self, node_id: int) -> bool:
         """Returns a bool of the contents of a cell.

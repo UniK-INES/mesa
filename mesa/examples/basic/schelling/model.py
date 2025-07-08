@@ -1,11 +1,14 @@
 from mesa import Model
 from mesa.datacollection import DataCollector
-from mesa.discrete_space import OrthogonalMooreGrid
+from mesa.discrete_space import OrthogonalMooreGrid, OrthogonalVonNeumannGrid
 from mesa.examples.basic.schelling.agents import SchellingAgent
 
 
 class Schelling(Model):
     """Model class for the Schelling segregation model."""
+
+    NEIGHBOURHOOD_MOORE = "Moore"
+    NEIGHBOURHOOD_VON_NEUMANN = "von Neumann"
 
     def __init__(
         self,
@@ -14,6 +17,7 @@ class Schelling(Model):
         density: float = 0.8,
         minority_pc: float = 0.5,
         homophily: float = 0.4,
+        perception_neighbourhood="Moore",
         radius: int = 1,
         seed=None,
     ):
@@ -25,6 +29,7 @@ class Schelling(Model):
             density: Initial chance for a cell to be populated (0-1)
             minority_pc: Chance for an agent to be in minority class (0-1)
             homophily: Minimum number of similar neighbors needed for happiness
+            perception_neighbourhood: Moore or VonNeumann
             radius: Search radius for checking neighbor similarity
             seed: Seed for reproducibility
         """
@@ -33,12 +38,21 @@ class Schelling(Model):
         # Model parameters
         self.density = density
         self.minority_pc = minority_pc
+        self.radius = radius
 
         # Initialize grid
-        self.grid = OrthogonalMooreGrid((width, height), random=self.random, capacity=1)
+        if perception_neighbourhood == Schelling.NEIGHBOURHOOD_MOORE:
+            self.grid = OrthogonalMooreGrid(
+                (width, height), random=self.random, capacity=1
+            )
+        else:
+            self.grid = OrthogonalVonNeumannGrid(
+                (width, height), random=self.random, capacity=1
+            )
 
         # Track happiness
         self.happy = 0
+        self.moves = 0
 
         # Set up data collection
         self.datacollector = DataCollector(
@@ -55,8 +69,14 @@ class Schelling(Model):
                     if len(m.agents) > 0
                     else 0
                 ),
+                "moves": "moves",
+                "radius": "radius",
             },
             agent_reporters={"agent_type": "type"},
+        )
+
+        self.perception_moore = (
+            perception_neighbourhood == Schelling.NEIGHBOURHOOD_MOORE
         )
 
         # Create agents and place them on the grid
@@ -78,3 +98,9 @@ class Schelling(Model):
         self.agents.do("assign_state")
         self.datacollector.collect(self)  # Collect data
         self.running = self.happy < len(self.agents)  # Continue until everyone is happy
+
+    def run(self, n):
+        """Run the model for n steps."""
+        for _ in range(n):
+            if self.running:
+                self.step()
