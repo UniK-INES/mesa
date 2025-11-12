@@ -8,11 +8,8 @@ import pytest
 import solara
 
 import mesa
-import mesa.visualization.components.altair_components
-import mesa.visualization.components.matplotlib_components
+import mesa.visualization.backends
 from mesa.space import MultiGrid, PropertyLayer
-from mesa.visualization.components.altair_components import make_altair_space
-from mesa.visualization.components.matplotlib_components import make_mpl_space_component
 from mesa.visualization.solara_viz import (
     ModelCreator,
     Slider,
@@ -20,6 +17,7 @@ from mesa.visualization.solara_viz import (
     UserInputs,
     _check_model_params,
 )
+from mesa.visualization.space_renderer import SpaceRenderer
 
 
 class TestMakeUserInput(unittest.TestCase):  # noqa: D101
@@ -95,18 +93,35 @@ class TestMakeUserInput(unittest.TestCase):  # noqa: D101
         assert slider_int.max is None
         assert slider_int.step is None
 
+    def test_input_text_field(self):
+        """Test that "InputText" type creates a vw.TextField."""
+
+        @solara.component
+        def Test(user_params):
+            UserInputs(user_params)
+
+        options = {"type": "InputText", "value": "JohnDoe", "label": "Agent Name"}
+
+        user_params = {"agent_name": options}
+
+        _, rc = solara.render(Test(user_params), handle_error=False)
+
+        textfield = rc.find(vw.TextField).widget
+
+        assert textfield.v_model == options["value"]
+        assert textfield.label == options["label"]
+
 
 def test_call_space_drawer(mocker):
     """Test the call to space drawer."""
-    mock_space_matplotlib = mocker.spy(
-        mesa.visualization.components.matplotlib_components, "SpaceMatplotlib"
+    mock_draw_space = mocker.spy(
+        mesa.visualization.space_renderer.SpaceRenderer, "draw_structure"
     )
-
-    mock_space_altair = mocker.spy(
-        mesa.visualization.components.altair_components, "SpaceAltair"
+    mock_draw_agents = mocker.spy(
+        mesa.visualization.space_renderer.SpaceRenderer, "draw_agents"
     )
-    mock_chart_property_layer = mocker.spy(
-        mesa.visualization.components.altair_components, "chart_property_layers"
+    mock_draw_properties = mocker.spy(
+        mesa.visualization.space_renderer.SpaceRenderer, "draw_propertylayer"
     )
 
     class MockAgent(mesa.Agent):
@@ -131,25 +146,39 @@ def test_call_space_drawer(mocker):
         return {"marker": "o", "color": "gray"}
 
     propertylayer_portrayal = None
-    # initialize with space drawer unspecified (use default)
+
+    renderer = SpaceRenderer(model, backend="matplotlib")
+    renderer.render(agent_portrayal, propertylayer_portrayal)
+
     # component must be rendered for code to run
     solara.render(
         SolaraViz(
             model,
-            components=[make_mpl_space_component(agent_portrayal)],
+            renderer,
+            components=[],
         )
     )
-    # should call default method with class instance and agent portrayal
-    mock_space_matplotlib.assert_called_with(
-        model, agent_portrayal, propertylayer_portrayal, post_process=None
+
+    assert renderer.backend == "matplotlib"
+    assert isinstance(
+        renderer.backend_renderer, mesa.visualization.backends.MatplotlibBackend
     )
 
-    # specify no space should be drawn
-    mock_space_matplotlib.reset_mock()
-    solara.render(SolaraViz(model, components="default"))
-    # should call default method with class instance and agent portrayal
-    assert mock_space_matplotlib.call_count == 0
-    assert mock_space_altair.call_count == 1  # altair is the default method
+    mock_draw_space.assert_called_with(renderer)
+    mock_draw_agents.assert_called_with(renderer, agent_portrayal)
+    # should not call this method if portrayal is None
+    mock_draw_properties.assert_not_called()
+
+    mock_draw_space.reset_mock()
+    mock_draw_agents.reset_mock()
+    mock_draw_properties.reset_mock()
+
+    solara.render(SolaraViz(model))
+
+    # noting is drawn if renderer is not passed
+    assert mock_draw_space.call_count == 0
+    assert mock_draw_agents.call_count == 0
+    assert mock_draw_properties.call_count == 0
 
     # checking if SpaceAltair is working as intended with post_process
     propertylayer_portrayal = {
@@ -161,34 +190,30 @@ def test_call_space_drawer(mocker):
             "vmax": 10,
         }
     }
-    mock_post_process = mocker.MagicMock()
-    solara.render(
-        SolaraViz(
-            model,
-            components=[
-                make_altair_space(
-                    agent_portrayal,
-                    post_process=mock_post_process,
-                    propertylayer_portrayal=propertylayer_portrayal,
-                )
-            ],
-        )
+    solara.render(SolaraViz(model, renderer, components=[]))
+
+    renderer = SpaceRenderer(model, backend="altair")
+    renderer.render(agent_portrayal, propertylayer_portrayal)
+
+    assert renderer.backend == "altair"
+    assert isinstance(
+        renderer.backend_renderer, mesa.visualization.backends.AltairBackend
     )
 
-    args, kwargs = mock_space_altair.call_args
-    assert args == (model, agent_portrayal)
-    assert kwargs == {
-        "post_process": mock_post_process,
-        "propertylayer_portrayal": propertylayer_portrayal,
-    }
-    mock_post_process.assert_called_once()
-    assert mock_chart_property_layer.call_count == 1
-    assert mock_space_matplotlib.call_count == 0
+    mock_draw_space.assert_called_with(renderer)
+    mock_draw_agents.assert_called_with(renderer, agent_portrayal)
+    mock_draw_properties.assert_called_with(renderer, propertylayer_portrayal)
 
-    mock_space_altair.reset_mock()
-    mock_space_matplotlib.reset_mock()
-    mock_post_process.reset_mock()
-    mock_chart_property_layer.reset_mock()
+    mock_draw_space.reset_mock()
+    mock_draw_agents.reset_mock()
+    mock_draw_properties.reset_mock()
+
+    solara.render(SolaraViz(model))
+
+    # noting is drawn if renderer is not passed
+    assert mock_draw_space.call_count == 0
+    assert mock_draw_agents.call_count == 0
+    assert mock_draw_properties.call_count == 0
 
     # specify a custom space method
     class AltSpace:
@@ -196,18 +221,10 @@ def test_call_space_drawer(mocker):
         def drawer(model):
             return
 
+    # check to verify that components are passed with the model instance
     altspace_drawer = mocker.spy(AltSpace, "drawer")
     solara.render(SolaraViz(model, components=[AltSpace.drawer]))
     altspace_drawer.assert_called_with(model)
-
-    # check voronoi space drawer
-    voronoi_model = mesa.Model()
-    voronoi_model.grid = mesa.discrete_space.VoronoiGrid(
-        centroids_coordinates=[(0, 1), (0, 0), (1, 0)],
-    )
-    solara.render(
-        SolaraViz(voronoi_model, components=[make_mpl_space_component(agent_portrayal)])
-    )
 
 
 def test_slider():
