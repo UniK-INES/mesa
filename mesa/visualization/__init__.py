@@ -14,6 +14,7 @@ from .components import make_plot_component, make_space_component
 from .components.altair_components import make_space_altair
 from .output import OutputWidgetHandler, freeze_logs, show_logs
 from .solara_viz import JupyterViz, SolaraViz
+from .space_renderer import SpaceRenderer
 from .user_param import Slider
 
 __all__ = [
@@ -22,6 +23,7 @@ __all__ = [
     "OutputWidgetHandler",
     "Slider",
     "SolaraViz",
+    "SpaceRenderer",
     "draw_space",
     "freeze_logs",
     "make_plot_component",

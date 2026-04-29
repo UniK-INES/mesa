@@ -6,10 +6,12 @@ The examples are categorized into two groups:
 1. **Basic Examples** - Simpler models that use only stable Mesa features; ideal for beginners
 2. **Advanced Examples** - More complex models that demonstrate additional concepts and may use some experimental features
 
-> **Note:** Looking for more examples? Visit the [mesa-examples](https://github.com/projectmesa/mesa-examples) repository for user-contributed models and showcases.
+> **Note:** Looking for more examples? Visit the [mesa-examples](https://github.com/mesa/mesa-examples) repository for user-contributed models and showcases.
 
 ## Basic Examples
 The basic examples are relatively simple and only use stable Mesa features. They are good starting points for learning how to use Mesa.
+
+_An online version of these examples is [available here](https://py.cafe/app/EwoutH/mesa-solara-basic-examples)._
 
 ### [Boltzmann Wealth Model](examples/basic/boltzmann_wealth_model)
 Completed code to go along with the [tutorial](https://mesa.readthedocs.io/latest/tutorials/0_first_model.html) on making a simple model of how a highly-skewed wealth distribution can emerge from simple rules.

@@ -12,11 +12,12 @@ Useful for models requiring irregular but mathematically meaningful spatial
 divisions, like territories, service areas, or natural regions.
 """
 
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from itertools import combinations
 from random import Random
 
 import numpy as np
+from scipy.spatial import KDTree
 
 from mesa.discrete_space.cell import Cell
 from mesa.discrete_space.discrete_space import DiscreteSpace
@@ -62,7 +63,9 @@ class Delaunay:
         """Compute circumcenter and circumradius of a triangle in 2D."""
         points = np.asarray([self.coords[v] for v in triangle])
         points2 = np.dot(points, points.T)
-        a = np.bmat([[2 * points2, [[1], [1], [1]]], [[[1, 1, 1, 0]]]])
+        a = np.block(
+            [[2 * points2, np.array([[1], [1], [1]])], [np.array([[1, 1, 1, 0]])]]
+        )
 
         b = np.hstack((np.sum(points * points, axis=1), [1]))
         x = np.linalg.solve(a, b)
@@ -182,10 +185,9 @@ class VoronoiGrid(DiscreteSpace):
     def __init__(
         self,
         centroids_coordinates: Sequence[Sequence[float]],
-        capacity: float | None = None,
+        capacity: int | Callable | None = None,
         random: Random | None = None,
         cell_klass: type[Cell] = Cell,
-        capacity_function: callable = round_float,
     ) -> None:
         """A Voronoi Tessellation Grid.
 
@@ -201,22 +203,58 @@ class VoronoiGrid(DiscreteSpace):
             capacity_function (Callable): function to compute (int) capacity according to (float) area
 
         """
-        super().__init__(capacity=capacity, random=random, cell_klass=cell_klass)
+        # Separate callable capacity from numeric capacity before passing to base class
+        if callable(capacity):
+            capacity_function = capacity
+            numeric_capacity = None
+        else:
+            capacity_function = None
+            numeric_capacity = capacity
+
+        super().__init__(
+            capacity=numeric_capacity, random=random, cell_klass=cell_klass
+        )
         self.centroids_coordinates = centroids_coordinates
+        self.capacity_function = capacity_function
         self._validate_parameters()
 
+        # Build KD-tree for fast nearest-centroid lookup
+        self._kdtree = KDTree(np.array(centroids_coordinates))
+
+        # Create cells with Integer coordinates and physical positions
+        # coordinate is now an integer index
         self._cells = {
-            i: cell_klass(self.centroids_coordinates[i], capacity, random=self.random)
+            i: cell_klass(
+                coordinate=i,  # Integer index
+                capacity=capacity,
+                random=self.random,
+                position=self.centroids_coordinates[i],  # Physical centroid position
+            )
             for i in range(len(self.centroids_coordinates))
         }
 
         self.regions = None
         self.triangulation = None
         self.voronoi_coordinates = None
-        self.capacity_function = capacity_function
 
         self._connect_cells()
         self._build_cell_polygons()
+
+    def find_nearest_cell(self, position: np.ndarray) -> Cell:
+        """Find the Voronoi cell nearest to the given position.
+
+        Args:
+            position: Physical position [x, y]
+
+        Returns:
+            Cell: The Voronoi cell whose centroid is nearest to position
+        """
+        position = np.asarray(position)
+
+        # Find nearest centroid using KD-tree
+        _distance, index = self._kdtree.query(position)
+
+        return self._cells[index]
 
     def _connect_cells(self) -> None:
         """Connect cells to neighbors based on given centroids and using Delaunay Triangulation."""
@@ -226,12 +264,14 @@ class VoronoiGrid(DiscreteSpace):
 
         for point in self.triangulation.export_triangles():
             for i, j in combinations(point, 2):
-                self._cells[i].connect(self._cells[j], (i, j))
-                self._cells[j].connect(self._cells[i], (j, i))
+                # Use integer indices as connection keys
+                self._cells[i].connect(self._cells[j], j)
+                self._cells[j].connect(self._cells[i], i)
 
     def _validate_parameters(self) -> None:
         if self.capacity is not None and not isinstance(self.capacity, float | int):
             raise ValueError("Capacity must be a number or None.")
+
         if not isinstance(self.centroids_coordinates, Sequence) or not isinstance(
             self.centroids_coordinates[0], Sequence
         ):
@@ -263,4 +303,10 @@ class VoronoiGrid(DiscreteSpace):
             self._cells[region].properties["polygon"] = polygon
             polygon_area = self._compute_polygon_area(polygon)
             self._cells[region].properties["area"] = polygon_area
-            self._cells[region].capacity = self.capacity_function(polygon_area)
+            if self.capacity is not None:
+                # User provided a fixed capacity — use it directly.
+                self._cells[region].capacity = self.capacity
+            elif self.capacity_function is not None:
+                # No fixed capacity but a function was provided — derive from area.
+                self._cells[region].capacity = self.capacity_function(polygon_area)
+            # else: both are None — cell capacity stays None (no limit).

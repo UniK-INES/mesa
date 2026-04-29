@@ -8,6 +8,15 @@ from mesa.experimental.meta_agents.meta_agent import (
     create_meta_agent,
     find_combinations,
 )
+from mesa.experimental.scenarios import Scenario
+
+
+class AllianceScenario(Scenario):
+    """Scenario for the Alliance model."""
+
+    n: int = 50
+    mean: float = 0.5
+    std_dev: float = 0.1
 
 
 class MultiLevelAllianceModel(mesa.Model):
@@ -15,7 +24,7 @@ class MultiLevelAllianceModel(mesa.Model):
     Model for simulating multi-level alliances among agents.
     """
 
-    def __init__(self, n=50, mean=0.5, std_dev=0.1, seed=42):
+    def __init__(self, scenario: AllianceScenario = AllianceScenario):
         """
         Initialize the model.
 
@@ -23,19 +32,18 @@ class MultiLevelAllianceModel(mesa.Model):
             n (int): Number of agents.
             mean (float): Mean value for normal distribution.
             std_dev (float): Standard deviation for normal distribution.
-            seed (int): Random seed.
+            rng (int): Random rng.
         """
-        super().__init__(seed=seed)
-        self.population = n
+        super().__init__(scenario=scenario)
         self.network = nx.Graph()  # Initialize the network
         self.datacollector = mesa.DataCollector(model_reporters={"Network": "network"})
 
         # Create Agents
-        power = self.rng.normal(mean, std_dev, n)
+        power = self.rng.normal(scenario.mean, scenario.std_dev, scenario.n)
         power = np.clip(power, 0, 1)
-        position = self.rng.normal(mean, std_dev, n)
+        position = self.rng.normal(scenario.mean, scenario.std_dev, scenario.n)
         position = np.clip(position, 0, 1)
-        AllianceAgent.create_agents(self, n, power, position)
+        AllianceAgent.create_agents(self, scenario.n, power, position)
         agent_ids = [
             (agent.unique_id, {"size": 300, "level": 0}) for agent in self.agents
         ]
@@ -57,25 +65,29 @@ class MultiLevelAllianceModel(mesa.Model):
         Calculate the Shapley value of the two agents.
 
         Args:
-            agents (list): List of agents.
+            agents: Pair of agents.
 
         Returns:
             tuple: Potential utility, new position, and level.
         """
-        positions = agents.get("position")
-        new_position = 1 - (max(positions) - min(positions))
-        potential_utility = agents.agg("power", sum) * 1.2 * new_position
+        agent_0, agent_1 = agents
 
-        value_0 = 0.5 * agents[0].power + 0.5 * (potential_utility - agents[1].power)
-        value_1 = 0.5 * agents[1].power + 0.5 * (potential_utility - agents[0].power)
+        new_position = 1 - (
+            max(agent_0.position, agent_1.position)
+            - min(agent_0.position, agent_1.position)
+        )
+        potential_utility = (agent_0.power + agent_1.power) * 1.2 * new_position
 
-        if value_0 > agents[0].power and value_1 > agents[1].power:
-            if agents[0].level > agents[1].level:
-                level = agents[0].level
-            elif agents[0].level == agents[1].level:
-                level = agents[0].level + 1
+        value_0 = 0.5 * agent_0.power + 0.5 * (potential_utility - agent_1.power)
+        value_1 = 0.5 * agent_1.power + 0.5 * (potential_utility - agent_0.power)
+
+        if value_0 > agent_0.power and value_1 > agent_1.power:
+            if agent_0.level > agent_1.level:
+                level = agent_0.level
+            elif agent_0.level == agent_1.level:
+                level = agent_0.level + 1
             else:
-                level = agents[1].level
+                level = agent_1.level
 
             return potential_utility, new_position, level
 
@@ -92,7 +104,7 @@ class MultiLevelAllianceModel(mesa.Model):
         best = {}
         # Determine best option for EACH agent
         for group, value in combinations:
-            agent_ids = sorted(group.get("unique_id"))  # by default is bilateral
+            agent_ids = sorted(a.unique_id for a in group)
             # Deal with all possibilities
             if (
                 agent_ids[0] not in best and agent_ids[1] not in best

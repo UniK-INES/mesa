@@ -16,24 +16,8 @@ In this simulation n agents are created, who have two attributes (1) power and (
 
 In MetaAgents current configuration, agents being part of multiple meta-agents is not supported.
 
-If you would like to see an example of explicit meta-agent formation see the [warehouse model in the Mesa example's repository](https://github.com/projectmesa/mesa-examples/tree/main/examples/warehouse)
+If you would like to see an example of explicit meta-agent formation see the [warehouse model in the Mesa example's repository](https://github.com/mesa/mesa-examples/tree/main/examples/warehouse)
 
-
-## Installation
-
-This model requires Mesa's recommended install and scipy
-
-```
-    $ pip install mesa[rec]
-```
-
-## How to Run
-
-To run the model interactively, in this directory, run the following command
-
-```
-    $ solara run app.py
-```
 
 ## Files
 
@@ -48,3 +32,17 @@ https://mesa.readthedocs.io/en/latest/tutorials/intro_tutorial.html
 
 An example of the bilateral shapley value in another model:
 [Techno-Social Energy Infrastructure Siting: Sustainable Energy Modeling Programming (SEMPro)](https://www.jasss.org/16/3/6.html)
+
+
+## How to Run
+
+Install Mesa with recommended dependencies:
+
+pip install "mesa[rec]"
+
+Then run the example:
+
+solara run app.py
+
+Open the displayed local URL in your browser.
+

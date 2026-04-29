@@ -1,13 +1,257 @@
 # Mesa Migration guide
 This guide contains breaking changes between major Mesa versions and how to resolve them.
 
-Non-breaking changes aren't included, for those see our [Release history](https://github.com/projectmesa/mesa/releases).
+Non-breaking changes aren't included, for those see our [Release history](https://github.com/mesa/mesa/releases).
+
+## Mesa 3.5.0
+### Event scheduling and time advancement
+Mesa 3.5 introduces public methods for event scheduling and time advancement directly on `Model`, replacing the need for `Simulator` classes.
+
+#### Time-based advancement replaces step loops
+```python
+# Old
+for _ in range(10):
+    model.step()
+
+# New
+model.run_for(10)    # Functionally equivalent for standard ABMs
+model.run_until(10)  # You can now also run until a specific time
+```
+`run_for(1)` produces identical results to `step()` for traditional models.
+
+#### One-off event scheduling
+
+```python
+# Schedule a single event at or after a specific time
+model.schedule_event(callback, at=50.0)    # Absolute time
+model.schedule_event(callback, after=5.0)  # Relative time
+
+# Cancel if needed
+event = model.schedule_event(callback, at=100.0)
+event.cancel()
+```
+
+#### Recurring event scheduling
+```python
+from mesa.time import Schedule
+
+# Schedule an event every 10 time units
+model.schedule_recurring(func, Schedule(interval=10))  # By default, starting after 1 interval (t=10 in this case)
+model.schedule_recurring(func, Schedule(interval=10, start=0))  # Start immediately or at any other time
+
+# Save the event and stop it when needed
+gen = model.schedule_recurring(func, Schedule(interval=5.0))
+gen.stop()
+
+# Limit executions
+model.schedule_recurring(func, Schedule(interval=1.0, count=10))
+```
+
+#### Replacing Simulator classes
+The experimental Simulator classes are now also deprecated.
+```python
+# Old - ABMSimulator
+from mesa.experimental.devs.simulator import ABMSimulator
+simulator = ABMSimulator()
+simulator.setup(model)
+simulator.run_for(100)
+
+# New
+model.run_for(100)
+```
+
+```python
+# Old - DEVSimulator
+from mesa.experimental.devs.simulator import DEVSimulator
+simulator = DEVSimulator()
+simulator.setup(model)
+simulator.schedule_event_absolute(callback, time=10.5)
+simulator.run_for(50)
+
+# New
+model.schedule_event(callback, at=10.5)
+model.run_for(50)
+```
+
+Mesa 3.5 doesn't introduce any breaking changes. Mesa 4 will clean up many deprecated components and thus will break unmodified models.
+
+* Ref: [Discussion #2921](https://github.com/mesa/mesa/discussions/2921), [PR #3266](https://github.com/projectmesa/mesa/pull/3266)
+
+### AgentSet sequence behavior
+The Sequence behavior (indexing and slicing) on `AgentSet` is deprecated and will be removed in Mesa 4.0. Use the new `to_list()` method instead.
+
+```python
+# Old (deprecated)
+first_agent = model.agents[0]
+some_agents = model.agents[1:5]
+last_agent = model.agents[-1]
+
+# New
+first_agent = model.agents.to_list()[0]
+some_agents = model.agents.to_list()[1:5]
+last_agent = model.agents.to_list()[-1]
+```
+
+For multiple list operations, convert once and reuse:
+
+```python
+agent_list = model.agents.to_list()
+first = agent_list[0]
+last = agent_list[-1]
+subset = agent_list[2:8]
+```
+
+- Ref: [PR #3208](https://github.com/mesa/mesa/pull/3208)
+
+## Mesa 3.4.0
+
+### batch run
+`batch_run` has been updated to offer explicit control over the random seeds that are used to run multiple replications of a given experiment. For this a new keyword argument, `rng` has been added and `iterations` will issue a `DeprecationWarning`. The new `rng` keyword argument takes a valid value for seeding or a list of valid values. If you want to run multiple iterations/replications of a given experiment, you need to pass the required seeds explicitly.
+
+Below is a simple example of the new recommended usage of `batch_run`. Note how we first create 5 random integers which we then use as seed values for the new `rng` keyword argument.
+
+```python
+import numpy as np
+import sys
+
+# let's create 5 random integers
+rng = np.random.default_rng(42)
+rng_values = rng.integers(0, sys.maxsize, size=(5,))
+
+results = mesa.batch_run(
+    MoneyModel,
+    parameters=params,
+    rng=rng_values.tolist(), # we pass the 5 seed values to rng
+    max_steps=100,
+    number_processes=1,
+    data_collection_period=1,
+    display_progress=True,
+)
+```
+
+## Mesa 3.3.0
+
+Mesa 3.3.0 is a visualization upgrade introducing a new and improved API, full support for both `altair` and `matplotlib` backends, and resolving several recurring issues from previous versions.
+For full details on how to visualize your model, refer to the [Mesa Documentation](https://mesa.readthedocs.io/latest/tutorials/4_visualization_basic.html).
+
+
+_This guide is a work in progress. The development of it is tracked in [Issue #2233](https://github.com/mesa/mesa/issues/2233)._
+
+
+### Defining Portrayal Components
+Previously, `agent_portrayal` returned a dictionary. Now, it returns an instance of a dedicated portrayal component called `AgentPortrayalStyle`.
+
+```python
+# Old
+def agent_portrayal(agent):
+    return {
+        "color": "white" if agent.state == 0 else "black",
+        "marker": "s",
+        "size": "30"
+    }
+
+# New
+def agent_portrayal(agent):
+    return AgentPortrayalStyle(
+        color="white" if agent.state == 0 else "black",
+        marker="s",
+        size=30,
+    )
+```
+
+Similarly, `propertylayer_portrayal` has moved from a dictionary-based interface to a function-based one, following the same pattern as `agent_portrayal`. It now returns a `PropertyLayerStyle` instance instead of a dictionary.
+
+```python
+# Old
+propertylayer_portrayal = {
+    "sugar": {
+        "colormap": "pastel1",
+        "alpha": 0.75,
+        "colorbar": True,
+        "vmin": 0,
+        "vmax": 10,
+    }
+}
+
+# New
+def propertylayer_portrayal(layer):
+    if layer.name == "sugar":
+        return PropertyLayerStyle(
+            color="pastel1", alpha=0.75, colorbar=True, vmin=0, vmax=10
+        )
+```
+
+* Ref: [PR #2786](https://github.com/mesa/mesa/pull/2786)
+
+### Passing portrayal arguments to draw methods
+Passing portrayal arguments directly to `draw_agents()` and `draw_propertylayer()` is deprecated. Use the `setup_agents()` and `setup_propertylayer()` methods before calling the draw methods.
+
+```python
+# Old
+renderer.draw_agents(agent_portrayal=agent_portrayal)
+renderer.draw_propertylayer(propertylayer_portrayal)
+
+# New
+renderer.setup_agents(agent_portrayal).draw_agents()
+renderer.setup_propertylayer(propertylayer_portrayal).draw_propertylayer()
+```
+
+This change allows for better method chaining and separates the configuration phase from the rendering phase.
+
+* Ref: [PR #2893](https://github.com/mesa/mesa/pull/2893)
+
+### Default Space Visualization
+While the visualization methods from Mesa versions before 3.3.0 still work, version 3.3.0 introduces `SpaceRenderer`, which changes how space visualizations are rendered. Check out the updated [Mesa documentation](https://mesa.readthedocs.io/latest/tutorials/4_visualization_basic.html) for guidance on upgrading your model’s visualization using `SpaceRenderer`.
+
+A basic example of how `SpaceRenderer` works:
+
+```python
+# Old
+from mesa.visualization import SolaraViz, make_space_component
+
+SolaraViz(model, components=[make_space_component(agent_portrayal)])
+
+# New
+from mesa.visualization import SolaraViz, SpaceRenderer
+
+renderer = SpaceRenderer(model, backend="matplotlib").render(
+    agent_portrayal=agent_portrayal,
+    ...
+)
+
+SolaraViz(
+    model,
+    renderer,
+    components=[],
+    ...
+)
+```
+
+* Ref: [PR #2803](https://github.com/mesa/mesa/pull/2803), [PR #2810](https://github.com/mesa/mesa/pull/2810)
+
+### Page Tab View
+
+Version 3.3.0 adds support for defining pages for different plot components. Learn more in the [Mesa documentation](https://mesa.readthedocs.io/latest/tutorials/6_visualization_rendering_with_space_renderer.html).
+
+In short, you can define multiple pages using the following syntax:
+
+```python
+from mesa.visualization import SolaraViz, make_plot_component
+
+SolaraViz(
+    model,
+    components=[
+        make_plot_component("foo", page=1),
+        make_plot_component("bar", "baz", page=2),
+    ],
+)
+```
+
+* Ref: [PR #2827](https://github.com/mesa/mesa/pull/2827)
 
 
 ## Mesa 3.0
 Mesa 3.0 introduces significant changes to core functionalities, including agent and model initialization, scheduling, and visualization. The guide below outlines these changes and provides instructions for migrating your existing Mesa projects to version 3.0.
-
-_This guide is a work in progress. The development of it is tracked in [Issue #2233](https://github.com/projectmesa/mesa/issues/2233)._
 
 
 ### Upgrade strategy
@@ -20,7 +264,7 @@ With each update, resolve all errors and warnings, before updating to the next o
 
 
 ### Reserved and private variables
-<!-- TODO: Update this section based on https://github.com/projectmesa/mesa/discussions/2230 -->
+<!-- TODO: Update this section based on https://github.com/mesa/mesa/discussions/2230 -->
 
 #### Reserved variables
 Currently, we have reserved the following variables:
@@ -32,13 +276,13 @@ You can use (read) any reserved variable, but Mesa may update them automatically
 #### Private variables
 Any variables starting with an underscore (`_`) are considered private and for Mesa's internal use. We might use any of those. Modifying or overwriting any private variable is at your own risk.
 
-- Ref: [Discussion #2230](https://github.com/projectmesa/mesa/discussions/2230), [PR #2225](https://github.com/projectmesa/mesa/pull/2225)
+- Ref: [Discussion #2230](https://github.com/mesa/mesa/discussions/2230), [PR #2225](https://github.com/mesa/mesa/pull/2225)
 
 
 ### Removal of `mesa.flat` namespace
 The `mesa.flat` namespace is removed. Use the full namespace for your imports.
 
-- Ref: [PR #2091](https://github.com/projectmesa/mesa/pull/2091)
+- Ref: [PR #2091](https://github.com/mesa/mesa/pull/2091)
 
 
 ### Mandatory Model initialization with `super().__init__()`
@@ -65,7 +309,7 @@ If you forget to call `super().__init__()`, you'll now see this error:
 RuntimeError: The Mesa Model class was not initialized. You must explicitly initialize the Model by calling super().__init__() on initialization.
 ```
 
-- Ref: [PR #2218](https://github.com/projectmesa/mesa/pull/2218), [PR #1928](https://github.com/projectmesa/mesa/pull/1928), Mesa-examples [PR #83](https://github.com/projectmesa/mesa-examples/pull/83)
+- Ref: [PR #2218](https://github.com/mesa/mesa/pull/2218), [PR #1928](https://github.com/mesa/mesa/pull/1928), Mesa-examples [PR #83](https://github.com/mesa/mesa-examples/pull/83)
 
 
 ### Automatic assignment of `unique_id` to Agents
@@ -101,7 +345,7 @@ In Mesa 3.0, `unique_id` for agents is now automatically assigned, simplifying a
    - `Model.next_id()` is removed
    - If you previously used custom `unique_id` values, store that information in a separate attribute
 
-- Ref: [PR #2226](https://github.com/projectmesa/mesa/pull/2226), [PR #2260](https://github.com/projectmesa/mesa/pull/2260), Mesa-examples [PR #194](https://github.com/projectmesa/mesa-examples/pull/194), [Issue #2213](https://github.com/projectmesa/mesa/issues/2213)
+- Ref: [PR #2226](https://github.com/mesa/mesa/pull/2226), [PR #2260](https://github.com/mesa/mesa/pull/2260), Mesa-examples [PR #194](https://github.com/mesa/mesa-examples/pull/194), [Issue #2213](https://github.com/mesa/mesa/issues/2213)
 
 
 ### AgentSet and `Model.agents`
@@ -136,7 +380,7 @@ The `steps` counter is now automatically increased. With each call to `Model.ste
 
 You can access it by `Model.steps`, and it's internally in the datacollector, batchrunner and the visualisation.
 
-- Ref: [PR #2223](https://github.com/projectmesa/mesa/pull/2223), Mesa-examples [PR #161](https://github.com/projectmesa/mesa-examples/pull/161)
+- Ref: [PR #2223](https://github.com/mesa/mesa/pull/2223), Mesa-examples [PR #161](https://github.com/mesa/mesa-examples/pull/161)
 
 #### Removal of `Model._time` and rename `._steps`
 - `Model._time` is removed. You can define your own time variable if needed.
@@ -246,7 +490,7 @@ self.agents_by_type[AgentType].shuffle_do("step")
 
 From now on you're now not bound by 5 distinct schedulers, but can mix and match any combination of AgentSet methods (`do`, `shuffle`, `select`, etc.) to get the desired Agent activation.
 
-Ref: Original discussion [#1912](https://github.com/projectmesa/mesa/discussions/1912), decision discussion [#2231](https://github.com/projectmesa/mesa/discussions/2231), example updates [#183](https://github.com/projectmesa/mesa-examples/pull/183) and [#201](https://github.com/projectmesa/mesa-examples/pull/201), PR [#2306](https://github.com/projectmesa/mesa/pull/2306)
+Ref: Original discussion [#1912](https://github.com/mesa/mesa/discussions/1912), decision discussion [#2231](https://github.com/mesa/mesa/discussions/2231), example updates [#183](https://github.com/mesa/mesa-examples/pull/183) and [#201](https://github.com/mesa/mesa-examples/pull/201), PR [#2306](https://github.com/mesa/mesa/pull/2306)
 
 ### Visualisation
 
@@ -343,4 +587,4 @@ With:
 self.datacollector = DataCollector(...)
 ```
 
-- Ref: [PR #2327](https://github.com/projectmesa/mesa/pull/2327), Mesa-examples [PR #208](https://github.com/projectmesa/mesa-examples/pull/208))
+- Ref: [PR #2327](https://github.com/mesa/mesa/pull/2327), Mesa-examples [PR #208](https://github.com/mesa/mesa-examples/pull/208))

@@ -4,7 +4,11 @@ from __future__ import annotations
 
 from collections.abc import Callable
 
-from .altair_components import SpaceAltair, make_altair_space
+from .altair_components import (
+    SpaceAltair,
+    make_altair_plot_component,
+    make_altair_space,
+)
 from .matplotlib_components import (
     SpaceMatplotlib,
     make_mpl_plot_component,
@@ -27,7 +31,7 @@ __all__ = [
 
 def make_space_component(
     agent_portrayal: Callable | None = None,
-    propertylayer_portrayal: dict | None = None,
+    property_layer_portrayal: dict | None = None,
     post_process: Callable | None = None,
     backend: str = "matplotlib",
     **space_drawing_kwargs,
@@ -36,7 +40,7 @@ def make_space_component(
 
     Args:
         agent_portrayal: Function to portray agents.
-        propertylayer_portrayal: Dictionary of PropertyLayer portrayal specifications
+        property_layer_portrayal: Dictionary of property_layer portrayal specifications
         post_process : a callable that will be called with the Axes instance. Allows for fine-tuning plots (e.g., control ticks)
         backend: the backend to use {"matplotlib", "altair"}
         space_drawing_kwargs : additional keyword arguments to be passed on to the underlying backend specific space drawer function. See
@@ -49,14 +53,14 @@ def make_space_component(
     if backend == "matplotlib":
         return make_mpl_space_component(
             agent_portrayal,
-            propertylayer_portrayal,
+            property_layer_portrayal,
             post_process,
             **space_drawing_kwargs,
         )
     elif backend == "altair":
         return make_altair_space(
             agent_portrayal,
-            propertylayer_portrayal,
+            property_layer_portrayal,
             post_process,
             **space_drawing_kwargs,
         )
@@ -70,6 +74,7 @@ def make_plot_component(
     measure: str | dict[str, str] | list[str] | tuple[str],
     post_process: Callable | None = None,
     backend: str = "matplotlib",
+    page: int = 0,
     **plot_drawing_kwargs,
 ):
     """Create a plotting function for a specified measure using the specified backend.
@@ -78,18 +83,20 @@ def make_plot_component(
         measure (str | dict[str, str] | list[str] | tuple[str]): Measure(s) to plot.
         post_process: a user-specified callable to do post-processing called with the Axes instance.
         backend: the backend to use {"matplotlib", "altair"}
+        page: Page number where the plot should be displayed (default 0).
         plot_drawing_kwargs: additional keyword arguments to pass onto the backend specific function for making a plotting component
 
-    Notes:
-        altair plotting backend is not yet implemented and planned for mesa 3.1.
-
     Returns:
-        function: A function that creates a plot component
+        (function, page): A tuple of a function and page number that creates a plot component on that specific page.
     """
     if backend == "matplotlib":
-        return make_mpl_plot_component(measure, post_process, **plot_drawing_kwargs)
+        return make_mpl_plot_component(
+            measure, post_process, page, **plot_drawing_kwargs
+        )
     elif backend == "altair":
-        raise NotImplementedError("altair line plots are not yet implemented")
+        return make_altair_plot_component(
+            measure, post_process, page, **plot_drawing_kwargs
+        )
     else:
         raise ValueError(
             f"unknown backend {backend}, must be one of matplotlib, altair"

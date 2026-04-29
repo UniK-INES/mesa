@@ -10,75 +10,65 @@ def test_model_set_up():
     """Test Model initialization."""
     model = Model()
     assert model.running is True
-    assert model.steps == 0
+    assert model.time == 0.0
+
     model.step()
-    assert model.steps == 1
+    assert model.time == 1.0
+
+
+def test_model_time_increment():
+    """Test that time increments correctly with steps."""
+    model = Model()
+
+    for i in range(5):
+        model.step()
+        assert model.time == float(i + 1)
 
 
 def test_running():
     """Test Model is running."""
 
     class TestModel(Model):
-        steps = 0
-
         def step(self):
-            """Increase steps until 10."""
-            if self.steps == 10:
+            """Stop at step 10."""
+            if self.time == 10:
                 self.running = False
 
     model = TestModel()
     model.run_model()
-    assert model.steps == 10
+    assert model.time == 10.0
 
 
-def test_seed(seed=23):
+def test_rng(rng=23):
     """Test initialization of model with specific seed."""
-    model = Model(seed=seed)
-    assert model._seed == seed
-    model2 = Model(seed=seed + 1)
-    assert model2._seed == seed + 1
-    assert model._seed == seed
+    model = Model(rng=rng)
+    assert (
+        model.scenario.initial_rng_state
+        == np.random.default_rng(rng).bit_generator.state
+    )
+    model2 = Model(rng=rng + 1)
+    assert (
+        model2.scenario.initial_rng_state
+        == np.random.default_rng(rng + 1).bit_generator.state
+    )
+    assert (
+        model.scenario.initial_rng_state
+        == np.random.default_rng(rng).bit_generator.state
+    )
 
-    assert Model(seed=42).random.random() == Model(seed=42).random.random()
+    assert Model(rng=42).random.random() == Model(rng=42).random.random()
     assert np.all(
-        Model(seed=42).rng.random(
+        Model(rng=42).rng.random(
             10,
         )
-        == Model(seed=42).rng.random(
+        == Model(rng=42).rng.random(
             10,
         )
     )
 
 
-def test_reset_randomizer(newseed=42):
-    """Test resetting the random seed on the model."""
-    model = Model()
-    oldseed = model._seed
-    model.reset_randomizer()
-    assert model._seed == oldseed
-    model.reset_randomizer(seed=newseed)
-    assert model._seed == newseed
-
-
-def test_reset_rng(newseed=42):
-    """Test resetting the random seed on the model."""
-    model = Model(rng=5)
-    old_rng = model._rng
-
-    model.reset_rng(rng=6)
-    new_rng = model._rng
-
-    assert old_rng != new_rng
-
-    old_rng = new_rng
-    model.reset_rng()
-    new_rng = model.rng.__getstate__()
-
-    assert old_rng != new_rng
-
-
 def test_agent_types():
-    """Test Mode.agent_types property."""
+    """Test Model.agent_types property."""
 
     class TestAgent(Agent):
         pass
@@ -102,8 +92,8 @@ def test_agents_by_type():
     wolf = Wolf(model)
     sheep = Sheep(model)
 
-    assert model.agents_by_type[Wolf] == AgentSet([wolf], model)
-    assert model.agents_by_type[Sheep] == AgentSet([sheep], model)
+    assert model.agents_by_type[Wolf] == AgentSet([wolf], random=model.random)
+    assert model.agents_by_type[Sheep] == AgentSet([sheep], random=model.random)
     assert len(model.agents_by_type) == 2
 
 

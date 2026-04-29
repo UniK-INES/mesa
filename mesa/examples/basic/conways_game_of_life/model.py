@@ -6,11 +6,13 @@ from mesa.examples.basic.conways_game_of_life.agents import Cell
 class ConwaysGameOfLife(Model):
     """Represents the 2-dimensional array of cells in Conway's Game of Life."""
 
-    def __init__(self, width=50, height=50, initial_fraction_alive=0.2, seed=None):
+    def __init__(self, width=50, height=50, initial_fraction_alive=0.2, rng=None):
         """Create a new playing area of (width, height) cells."""
-        super().__init__(seed=seed)
+        super().__init__(rng=rng)
         # Use a simple grid, where edges wrap around.
-        self.grid = OrthogonalMooreGrid((width, height), capacity=1, torus=True)
+        self.grid = OrthogonalMooreGrid(
+            (width, height), capacity=1, random=self.random, torus=True
+        )
 
         # Place a cell at each location, with some initialized to
         # ALIVE and some to DEAD.

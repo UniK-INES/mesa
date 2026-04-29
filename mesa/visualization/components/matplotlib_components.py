@@ -16,7 +16,7 @@ from mesa.visualization.utils import update_counter
 def make_space_matplotlib(*args, **kwargs):  # noqa: D103
     warnings.warn(
         "make_space_matplotlib has been renamed to make_mpl_space_component",
-        DeprecationWarning,
+        FutureWarning,
         stacklevel=2,
     )
     return make_mpl_space_component(*args, **kwargs)
@@ -24,7 +24,7 @@ def make_space_matplotlib(*args, **kwargs):  # noqa: D103
 
 def make_mpl_space_component(
     agent_portrayal: Callable | None = None,
-    propertylayer_portrayal: dict | None = None,
+    property_layer_portrayal: dict | None = None,
     post_process: Callable | None = None,
     **space_drawing_kwargs,
 ) -> SpaceMatplotlib:
@@ -32,7 +32,7 @@ def make_mpl_space_component(
 
     Args:
         agent_portrayal: Function to portray agents.
-        propertylayer_portrayal: Dictionary of PropertyLayer portrayal specifications
+        property_layer_portrayal: Dictionary of property_layer portrayal specifications
         post_process : a callable that will be called with the Axes instance. Allows for fine tuning plots (e.g., control ticks)
         space_drawing_kwargs : additional keyword arguments to be passed on to the underlying space drawer function. See
                                the functions for drawing the various spaces for further details.
@@ -52,7 +52,7 @@ def make_mpl_space_component(
         return SpaceMatplotlib(
             model,
             agent_portrayal,
-            propertylayer_portrayal,
+            property_layer_portrayal,
             post_process=post_process,
             **space_drawing_kwargs,
         )
@@ -64,7 +64,7 @@ def make_mpl_space_component(
 def SpaceMatplotlib(
     model,
     agent_portrayal,
-    propertylayer_portrayal,
+    property_layer_portrayal,
     dependencies: list[any] | None = None,
     post_process: Callable | None = None,
     **space_drawing_kwargs,
@@ -82,7 +82,7 @@ def SpaceMatplotlib(
     draw_space(
         space,
         agent_portrayal,
-        propertylayer_portrayal=propertylayer_portrayal,
+        property_layer_portrayal=property_layer_portrayal,
         ax=ax,
         **space_drawing_kwargs,
     )
@@ -98,7 +98,7 @@ def SpaceMatplotlib(
 def make_plot_measure(*args, **kwargs):  # noqa: D103
     warnings.warn(
         "make_plot_measure has been renamed to make_plot_component",
-        DeprecationWarning,
+        FutureWarning,
         stacklevel=2,
     )
     return make_mpl_plot_component(*args, **kwargs)
@@ -107,6 +107,7 @@ def make_plot_measure(*args, **kwargs):  # noqa: D103
 def make_mpl_plot_component(
     measure: str | dict[str, str] | list[str] | tuple[str],
     post_process: Callable | None = None,
+    page: int = 0,
     save_format="png",
 ):
     """Create a plotting function for a specified measure.
@@ -114,10 +115,11 @@ def make_mpl_plot_component(
     Args:
         measure (str | dict[str, str] | list[str] | tuple[str]): Measure(s) to plot.
         post_process: a user-specified callable to do post-processing called with the Axes instance.
+        page: Page number where the plot should be displayed.
         save_format: save format of figure in solara backend
 
     Returns:
-        function: A function that creates a PlotMatplotlib component.
+        (function, page): A tuple of a function that creates a PlotMatplotlib component and a page number.
     """
 
     def MakePlotMatplotlib(model):
@@ -125,7 +127,7 @@ def make_mpl_plot_component(
             model, measure, post_process=post_process, save_format=save_format
         )
 
-    return MakePlotMatplotlib
+    return (MakePlotMatplotlib, page)
 
 
 @solara.component
