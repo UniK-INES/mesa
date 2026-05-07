@@ -70,8 +70,6 @@ class Schelling(Model):
         self.happy = 0
         self.moves = 0
 
-        print(f"Model initialised with homophly {scenario.homophily}")
-
         # Set up data collection
         self.datacollector = DataCollector(
             model_reporters={
