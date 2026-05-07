@@ -35,10 +35,8 @@ class Schelling(Model):
     def __init__(
         self,
         scenario: SchellingScenario = SchellingScenario,
-        homophily: float = 0.4,
         perception_neighbourhood="Moore",
         radius: int = 1,
-        seed=None,
     ):
         """Create a new Schelling model.
 
@@ -71,6 +69,8 @@ class Schelling(Model):
         # Track happiness
         self.happy = 0
         self.moves = 0
+
+        print(f"Model initialised with homophly {scenario.homophily}")
 
         # Set up data collection
         self.datacollector = DataCollector(
