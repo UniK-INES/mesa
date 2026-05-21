@@ -1,18 +1,21 @@
+"""Custom logging handler sending logs to an output widget."""
+
 import logging
 
 import ipywidgets as widgets
 
 
 class OutputWidgetHandler(logging.Handler):
-    """Custom logging handler sending logs to an output widget"""
+    """Custom logging handler sending logs to an output widget."""
 
     def __init__(self, *args, **kwargs):
+        """Init OutputWidgetHandler."""
         super().__init__(*args, **kwargs)
-        layout = {"width": "100%", "height": "160px", "border": "1px solid black"}
+        layout = {"width": "100%", "height": "160px", "border": "0px solid black"}
         self.out = widgets.Output(layout=layout)
 
     def emit(self, record):
-        """Overload of logging.Handler method"""
+        """Overload of logging.Handler method."""
         formatted_record = self.format(record)
         new_output = {
             "name": "stdout",
@@ -22,15 +25,16 @@ class OutputWidgetHandler(logging.Handler):
         self.out.outputs = (new_output, *self.out.outputs)
 
     def show_logs(self):
-        """Show the logs"""
+        """Show the logs."""
         display(self.out)  # noqa: F821
 
     def clear_logs(self):
-        """Clear the current logs"""
+        """Clear the current logs."""
         self.out.clear_output()
 
 
 def show_logs(name):
+    """Show the logs."""
     logger = logging.getLogger(name)
     handler = OutputWidgetHandler()
     handler.setFormatter(logging.Formatter("[%(levelname)s] %(message)s"))
@@ -41,5 +45,6 @@ def show_logs(name):
 
 
 def freeze_logs(name):
+    """Freeze the logs."""
     logger = logging.getLogger(name)
     logger.handlers.clear()

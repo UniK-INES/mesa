@@ -1,4 +1,7 @@
 # noqa: D100
+import base64
+import io
+import os
 import warnings
 from collections.abc import Callable
 from dataclasses import fields
@@ -7,6 +10,7 @@ import altair as alt
 import numpy as np
 import pandas as pd
 from matplotlib.colors import to_rgb
+from PIL import Image
 
 import mesa
 from mesa.discrete_space import (
@@ -158,6 +162,8 @@ class AltairBackend(AbstractRenderer):
             )
             shape_value = marker_to_shape_map.get(raw_marker, raw_marker)
             if shape_value is None:
+                # TODO only reached if style_fields.get("marker") is None (but is usually "o" if not overwritten by user)
+                # (because marker_to_shape_map returns raw_marker as default)
                 warnings.warn(
                     f"Marker '{raw_marker}' is not supported in Altair. "
                     "Using 'circle' as default.",
@@ -220,12 +226,40 @@ class AltairBackend(AbstractRenderer):
         # that's why changing the the domain of strokeWidth beforehand.
         stroke_width = [data / 10 for data in arguments["strokeWidth"]]
 
+        image_width = max(arguments["size"])
+        image_height = image_width
+        has_images = False
+
+        shapes = []
+
+        # TODO check whether images and shapes interact
+        for shape in arguments["shape"]:
+            newshape = shape
+            if isinstance(shape, str | os.PathLike) and os.path.isfile(shape):
+                has_images = True
+                with Image.open(shape) as img:
+                    original_width, original_height = img.size
+                    scale_factor = image_width / original_width
+                    new_width = int(original_width * scale_factor)
+                    new_height = int(original_height * scale_factor)
+                    img_resized = img.resize(
+                        (new_width, new_height), Image.Resampling.LANCZOS
+                    )
+
+                    buffer = io.BytesIO()
+                    img_resized.save(buffer, format="PNG")
+                    buffer.seek(0)
+                    image_data = base64.b64encode(buffer.read()).decode()
+                    newshape = f"data:image/png;base64,{image_data}"
+
+            shapes.append(newshape)
+
         # Agent data preparation
         df_data = {
             "x": arguments["loc"][:, 0],
             "y": arguments["loc"][:, 1],
             "size": arguments["size"],
-            "shape": arguments["shape"],
+            "shape": shapes,
             "opacity": arguments["opacity"],
             "strokeWidth": stroke_width,
             "original_color": arguments["color"],
@@ -352,6 +386,12 @@ class AltairBackend(AbstractRenderer):
             )
             .properties(title=title, width=chart_width, height=chart_height)
         )
+
+        # added by SH
+        if has_images:
+            chart = chart.mark_image(width=image_width, height=image_height).encode(
+                x="x:Q", y="y:Q", url="shape:N"
+            )
 
         return chart
 

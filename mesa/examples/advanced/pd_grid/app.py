@@ -17,7 +17,10 @@ def pd_agent_portrayal(agent):
     Portrayal function for rendering PD agents in the visualization.
     """
     return AgentPortrayalStyle(
-        color="blue" if agent.move == "C" else "red", marker="s", size=25
+        color="blue" if agent.move == "C" else "red",
+        marker="s",
+        size=25,
+        tooltip={"Move": agent.move, "Score": agent.score},
     )
 
 
