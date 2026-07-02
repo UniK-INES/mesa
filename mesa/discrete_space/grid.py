@@ -279,7 +279,11 @@ class Grid(DiscreteSpace[T]):
         if self.capacity is not None and not isinstance(self.capacity, float | int):
             raise TypeError("Capacity must be a number or None.")
 
-    def select_random_empty_cell(self) -> T:  # noqa
+    def select_random_empty_cell(
+        self,
+        random: Random | None = None,
+    ) -> T:
+        """Select random empty cell."""
         # Use a heuristic: try random sampling first for performance (O(1))
         # FIXME:: basically if grid is close to 99% full, creating empty list can be faster
         # FIXME:: note however that the old results don't apply because in this implementation
@@ -289,7 +293,9 @@ class Grid(DiscreteSpace[T]):
         # https://github.com/mesa/mesa/issues/1052 and
         # https://github.com/mesa/mesa/pull/1565. The cutoff value provided
         # is the break-even comparison with the time taken in the else branching point.
-        random = self.random
+        if random is None:
+            random = self.random
+
         cells = self._celllist
 
         if self._try_random:
@@ -301,7 +307,7 @@ class Grid(DiscreteSpace[T]):
 
         empty_coords = np.argwhere(self.property_layers["empty"])
         try:
-            random_coord = self.random.choice(empty_coords)
+            random_coord = random.choice(empty_coords)
         except IndexError as e:
             raise ValueError(
                 "Grid is completely full. No empty cells available. "

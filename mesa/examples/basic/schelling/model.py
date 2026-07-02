@@ -86,7 +86,6 @@ class Schelling(Model):
                     else 0
                 ),
                 "moves": "moves",
-                "radius": "radius",
             },
             agent_reporters={"agent_type": "type"},
         )
